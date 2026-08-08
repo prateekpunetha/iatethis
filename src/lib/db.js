@@ -28,7 +28,6 @@ function similarity(a, b) {
 	a = normalize(a);
 	b = normalize(b);
 	if (a === b) return 1;
-	if (a.includes(b) || b.includes(a)) return 0.85;
 
 	/* token overlap */
 	const tokensA = new Set(a.split(' '));
