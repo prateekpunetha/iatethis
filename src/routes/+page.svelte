@@ -134,6 +134,8 @@
 
 				newItems.push({
 					name: food.name,
+					qty: item.qty,
+					unit: item.unit,
 					qty_g: Math.round(grams),
 					cal: round1((macros.cal || 0) * factor),
 					protein: round1((macros.protein || 0) * factor),
@@ -229,7 +231,7 @@
 
 				<div class="chat-bubble system">
 					<div class="reply-header">
-						Added {meal.items.map(i => i.name).join(', ')}. Here is your updated diet:
+						Added {meal.items.map(i => `${i.name} (${Math.round(i.cal)} cal, ${i.protein}g pro)`).join(', ')}. Here is your updated diet:
 					</div>
 					<table class="chat-table">
 						<thead>
@@ -245,7 +247,13 @@
 								{#each runningItems[meal.id] as item}
 								<tr>
 									<td>{item.name}</td>
-									<td class="num">{item.qty_g}g</td>
+									<td class="num">
+										{#if item.qty !== undefined}
+											{item.qty}{item.unit === 'piece' || item.unit === 'serving' ? '' : item.unit}
+										{:else}
+											{item.qty_g}g
+										{/if}
+									</td>
 									<td class="num">{Math.round(item.cal)}</td>
 									<td class="num">{item.protein}g</td>
 								</tr>

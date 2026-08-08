@@ -208,7 +208,7 @@ html, body {
 
 .reply-total {
 	font-size: 0.75rem;
-	color: var(--color-pro);
+	color: var(--text-muted);
 	margin-top: 0.85rem;
 	padding-top: 0.75rem;
 	border-top: 1px dashed var(--border);
