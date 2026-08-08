@@ -13,6 +13,32 @@
 	let chatArea;
 
 	let items = $derived(meals.flatMap(m => m.items));
+
+	/* Calculate running totals and running item lists for each meal */
+	let runningTotals = $derived.by(() => {
+		const r = {};
+		let current = { cal: 0, pro: 0, fat: 0, carbs: 0 };
+		for (const meal of meals) {
+			for (const item of meal.items) {
+				current.cal += item.cal;
+				current.pro += item.protein;
+				current.fat += item.fat;
+				current.carbs += item.carbs;
+			}
+			r[meal.id] = { ...current };
+		}
+		return r;
+	});
+
+	let runningItems = $derived.by(() => {
+		const r = {};
+		let accumulated = [];
+		for (const meal of meals) {
+			accumulated = [...accumulated, ...meal.items];
+			r[meal.id] = [...accumulated];
+		}
+		return r;
+	});
 	let totals = $derived(
 		items.reduce(
 			(acc, item) => ({
@@ -182,28 +208,41 @@
 				<span class="value">{totals.carbs}g</span>
 			</div>
 		</div>
+
 	</header>
 
 	<main class="log-area chat-area" bind:this={chatArea}>
-		{#if meals.length > 0}
-			<div class="chat-thread">
-				<div class="chat-intro">Tracker started. Log your meals below.</div>
-				{#each meals as meal}
+		<div class="chat-thread">
+			{#if meals.length === 0 && !loading}
+				<div class="empty">
+					<div>What did you eat today?</div>
+					<div class="hint">try "200g chicken and 1 cup rice"</div>
+				</div>
+			{/if}
+
+			{#each meals as meal (meal.id)}
+				{#if meal.rawInput}
 					<div class="chat-bubble user">
-						{meal.rawInput || 'Logged items'}
+						{meal.rawInput}
 					</div>
-					<div class="chat-bubble system">
-						<table class="chat-table">
-							<thead>
-								<tr>
-									<th>item</th>
-									<th class="num">qty</th>
-									<th class="num">cal</th>
-									<th class="num">pro</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each meal.items as item}
+				{/if}
+
+				<div class="chat-bubble system">
+					<div class="reply-header">
+						Added {meal.items.map(i => i.name).join(', ')}. Here is your updated diet:
+					</div>
+					<table class="chat-table">
+						<thead>
+							<tr>
+								<th>item</th>
+								<th class="num">qty</th>
+								<th class="num">cal</th>
+								<th class="num">pro</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#if runningItems[meal.id]}
+								{#each runningItems[meal.id] as item}
 								<tr>
 									<td>{item.name}</td>
 									<td class="num">{item.qty_g}g</td>
@@ -211,20 +250,20 @@
 									<td class="num">{item.protein}g</td>
 								</tr>
 								{/each}
-							</tbody>
-						</table>
-						<div class="system-actions">
-							<button class="text-btn" onclick={() => deleteMealEntry(meal.id)}>delete</button>
-						</div>
+							{/if}
+						</tbody>
+					</table>
+					{#if runningTotals[meal.id]}
+					<div class="reply-total">
+						Total: {Math.round(runningTotals[meal.id].cal)} cal, {Math.round(runningTotals[meal.id].pro)}g pro, {Math.round(runningTotals[meal.id].fat)}g fat
 					</div>
-				{/each}
-			</div>
-		{:else}
-			<div class="empty">
-				<div>what did you eat today?</div>
-				<div class="hint">try "200g chicken and 1 cup rice"</div>
-			</div>
-		{/if}
+					{/if}
+					<div class="system-actions">
+						<button class="text-btn" onclick={() => deleteMealEntry(meal.id)}>Undo Addition</button>
+					</div>
+				</div>
+			{/each}
+		</div>
 	</main>
 
 	<div class="input-section">

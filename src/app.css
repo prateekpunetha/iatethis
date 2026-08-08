@@ -140,6 +140,8 @@ html, body {
 	font-family: var(--font-mono);
 }
 
+
+
 /* CHAT AREA */
 
 .chat-area {
@@ -197,6 +199,22 @@ html, body {
 	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
 }
 
+.reply-header {
+	font-size: 0.9rem;
+	color: var(--text);
+	margin-bottom: 0.85rem;
+	line-height: 1.4;
+}
+
+.reply-total {
+	font-size: 0.75rem;
+	color: var(--color-pro);
+	margin-top: 0.85rem;
+	padding-top: 0.75rem;
+	border-top: 1px dashed var(--border);
+	font-weight: 500;
+}
+
 /* TABLE IN CHAT */
 
 .chat-table {
@@ -239,7 +257,7 @@ html, body {
 /* ACTIONS */
 
 .system-actions {
-	margin-top: 0.75rem;
+	margin-top: 0.5rem;
 	display: flex;
 	justify-content: flex-end;
 }
