@@ -61,49 +61,59 @@
 		const missed = [];
 
 		for (const item of parsed) {
-			let food = await findFood(item.name);
-			let source = 'local';
+			try {
+				let food = await findFood(item.name);
+				let source = 'local';
 
-			if (!food) {
-				try {
-					const res = await fetch('/api/lookup', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ food: item.name })
-					});
+				if (!food) {
+					try {
+						const res = await fetch('/api/lookup', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ food: item.name })
+						});
 
-					if (!res.ok) {
-						const err = await res.json();
-						missed.push(item.name + ': ' + (err.error || 'lookup failed'));
+						if (!res.ok) {
+							const err = await res.json().catch(() => ({}));
+							missed.push(item.name + ': ' + (err.error || 'lookup failed'));
+							continue;
+						}
+
+						food = await res.json();
+						food.id = await saveFood(food);
+						source = 'gemini';
+						dbCount = (await getAllFoods()).length;
+					} catch (e) {
+						missed.push(item.name + ': network error');
 						continue;
 					}
+				}
 
-					food = await res.json();
-					await saveFood(food);
-					source = 'gemini';
-					dbCount = (await getAllFoods()).length;
-				} catch (e) {
-					missed.push(item.name + ': network error');
+				if (!food || !food.per_100g) {
+					missed.push(item.name + ': invalid data');
 					continue;
 				}
+
+				const grams = toGrams(item, food);
+				const macros = food.per_100g;
+				const factor = grams / 100;
+
+				newItems.push({
+					name: food.name,
+					qty_g: Math.round(grams),
+					cal: round1((macros.cal || 0) * factor),
+					protein: round1((macros.protein || 0) * factor),
+					fat: round1((macros.fat || 0) * factor),
+					carbs: round1((macros.carbs || 0) * factor),
+					fiber: round1((macros.fiber || 0) * factor),
+					source
+				});
+
+				if (food.id) await bumpUsage(food.id);
+			} catch (err) {
+				console.error('Error processing item:', item, err);
+				missed.push(item.name + ': internal error');
 			}
-
-			const grams = toGrams(item, food);
-			const macros = food.per_100g;
-			const factor = grams / 100;
-
-			newItems.push({
-				name: food.name,
-				qty_g: Math.round(grams),
-				cal: round1(macros.cal * factor),
-				protein: round1(macros.protein * factor),
-				fat: round1(macros.fat * factor),
-				carbs: round1(macros.carbs * factor),
-				fiber: round1(macros.fiber * factor),
-				source
-			});
-
-			await bumpUsage(food.id);
 		}
 
 		if (newItems.length > 0) {
