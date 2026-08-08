@@ -1,0 +1,3 @@
+Palette/material: off-white paper (#fcfcfc), black ink (#111111), gray (#a0a0a0), red accent (#ea4335).
+Type/composition: Clean black text on off-white paper, separated by thin, precise hairline rules.
+Topology/navigation: Strictly utilitarian digital notebook layout, stacking chronologically with high contrast.

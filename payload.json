@@ -1,0 +1,48 @@
+{
+  "title": "Choose the visual world (Clean & Modern)",
+  "question": "Here are 4 fresh, non-sci-fi directions for the macro tracker. Which vibe feels right?",
+  "options": [
+    {
+      "id": "minimalist-ledger",
+      "label": "Minimalist Ledger",
+      "lineage": "Physical paper receipts and clean notebooks",
+      "thesis": "A stripped-back, high-contrast digital notebook that puts data first.",
+      "palette": ["#fcfcfc", "#111111", "#a0a0a0", "#ea4335"],
+      "materials": ["off-white paper", "black ink", "hairline rules"],
+      "viewport": "Clean black text on an off-white background, separated by thin, precise hairline rules. Strictly utilitarian but elegant.",
+      "sketch": ".impeccable/sketches/ledger.jpg"
+    },
+    {
+      "id": "soft-wellness",
+      "label": "Soft Wellness",
+      "lineage": "Modern health and meditation apps",
+      "thesis": "A calm, forgiving interface that feels less like an instrument and more like a gentle habit.",
+      "palette": ["#f7f5f0", "#4a5d4e", "#8c998f", "#e6d5c3"],
+      "materials": ["warm oat backgrounds", "soft shadows", "rounded pills"],
+      "viewport": "Warm oat backgrounds, soft drop shadows, deeply rounded pill shapes, and muted sage green accents.",
+      "sketch": ".impeccable/sketches/organic.jpg"
+    },
+    {
+      "id": "modern-glassy",
+      "label": "Modern Glassy",
+      "lineage": "Premium native iOS 18 design",
+      "thesis": "Premium modern aesthetics that feel native, fluid, and deeply integrated.",
+      "palette": ["#000000", "#1c1c1e", "#34c759", "#007aff"],
+      "materials": ["frosted glass", "vibrant gradients", "true black"],
+      "viewport": "Translucent frosted glass layers floating over subtle dark gradient backgrounds with vivid, glowing macro rings.",
+      "sketch": ".impeccable/sketches/glassy.jpg"
+    },
+    {
+      "id": "editorial-print",
+      "label": "Editorial Print",
+      "lineage": "High-end magazines and Swiss posters",
+      "thesis": "High-end editorial design prioritizing sharp typography and extreme whitespace.",
+      "palette": ["#ffffff", "#000000", "#e0e0e0"],
+      "materials": ["stark white space", "elegant serif numbers", "sharp grids"],
+      "viewport": "Massive, elegant serif numbers for macros against a stark white background, anchored by a strict structural grid.",
+      "sketch": ".impeccable/sketches/editorial.png"
+    }
+  ],
+  "reroll": false,
+  "steer": true
+}

@@ -104,15 +104,22 @@ export async function bumpUsage(id) {
 }
 
 /** Log a meal entry */
-export async function logMeal(items) {
+export async function logMeal(items, rawInput = '') {
 	const db = await getDB();
 	const today = new Date().toISOString().split('T')[0];
 	const entry = {
 		date: today,
+		rawInput,
 		items: JSON.parse(JSON.stringify(items)),
 		logged_at: new Date().toISOString()
 	};
 	return db.add('meals', entry);
+}
+
+/** Delete a specific meal */
+export async function deleteMeal(id) {
+	const db = await getDB();
+	await db.delete('meals', id);
 }
 
 /** Get all meals for today */

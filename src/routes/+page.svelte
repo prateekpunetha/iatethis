@@ -1,17 +1,18 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { parseInput, toGrams } from '$lib/parser.js';
-	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods } from '$lib/db.js';
+	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal } from '$lib/db.js';
 	import { SEED_FOODS } from '$lib/seeds.js';
 
 	let input = $state('');
-	let items = $state([]); // [{ name, qty_g, cal, protein, fat, carbs, fiber }]
+	let meals = $state([]); // { id, rawInput, items, logged_at }
 	let status = $state(null); // { type: 'loading'|'error'|'success', message: '' }
 	let dbCount = $state(0);
 	let loading = $state(false);
-	let summary = $state('');
-	let summaryLoading = $state(false);
+	
+	let chatArea;
 
+	let items = $derived(meals.flatMap(m => m.items));
 	let totals = $derived(
 		items.reduce(
 			(acc, item) => ({
@@ -40,15 +41,23 @@
 	});
 
 	async function loadTodaysMeals() {
-		const meals = await getTodaysMeals();
-		items = meals.flatMap(m => m.items);
+		meals = await getTodaysMeals();
+		scrollToBottom();
+	}
+	
+	async function scrollToBottom() {
+		await tick();
+		if (chatArea) {
+			chatArea.scrollTop = chatArea.scrollHeight;
+		}
 	}
 
 	async function handleSubmit() {
 		if (!input.trim() || loading) return;
 
 		loading = true;
-		status = { type: 'loading', message: 'looking up...' };
+		status = { type: 'loading', message: 'analyzing...' };
+		const rawInput = input;
 
 		const parsed = parseInput(input);
 		if (parsed.length === 0) {
@@ -74,8 +83,7 @@
 						});
 
 						if (!res.ok) {
-							const err = await res.json().catch(() => ({}));
-							missed.push(item.name + ': ' + (err.error || 'lookup failed'));
+							missed.push(item.name);
 							continue;
 						}
 
@@ -84,13 +92,13 @@
 						source = 'gemini';
 						dbCount = (await getAllFoods()).length;
 					} catch (e) {
-						missed.push(item.name + ': network error');
+						missed.push(item.name);
 						continue;
 					}
 				}
 
 				if (!food || !food.per_100g) {
-					missed.push(item.name + ': invalid data');
+					missed.push(item.name);
 					continue;
 				}
 
@@ -111,55 +119,33 @@
 
 				if (food.id) await bumpUsage(food.id);
 			} catch (err) {
-				console.error('Error processing item:', item, err);
-				missed.push(item.name + ': internal error');
+				missed.push(item.name);
 			}
 		}
 
 		if (newItems.length > 0) {
-			items = [...items, ...newItems];
-			await logMeal(newItems);
+			await logMeal(newItems, rawInput);
+			await loadTodaysMeals();
 		}
 
 		if (missed.length > 0) {
 			status = { type: 'error', message: 'missed: ' + missed.join(', ') };
 		} else {
-			status = { type: 'success', message: newItems.map(i => i.name).join(', ') + ' added' };
-			setTimeout(() => { status = null; }, 3000);
+			status = null;
 		}
 
 		input = '';
 		loading = false;
-		fetchSummary();
 	}
 
-	async function fetchSummary() {
-		if (items.length === 0) { summary = ''; return; }
-		summaryLoading = true;
-		try {
-			const res = await fetch('/api/summary', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ items, totals })
-			});
-			if (res.ok) {
-				const data = await res.json();
-				summary = data.summary || '';
-			}
-		} catch (e) {
-			/* silent fail, summary is optional */
-		}
-		summaryLoading = false;
-	}
-
-	function removeItem(index) {
-		items = items.filter((_, i) => i !== index);
-		clearTodaysMeals().then(() => logMeal(items));
+	async function deleteMealEntry(id) {
+		await deleteMeal(id);
+		await loadTodaysMeals();
 	}
 
 	async function clearAll() {
-		items = [];
 		await clearTodaysMeals();
+		await loadTodaysMeals();
 		status = null;
 	}
 
@@ -172,132 +158,91 @@
 	}
 </script>
 
-<div class="container">
+<div class="app-layout">
 	<header class="header">
-		<h1>iatethis</h1>
-		<span class="meta">{today}</span>
-	</header>
-
-	{#if items.length > 0}
-		<div class="summary">
-			<div class="summary-card">
-				<div class="label">cal</div>
-				<div class="value">{Math.round(totals.cal)}</div>
+		<div class="title-bar">
+			<h1>iatethis</h1>
+			<span class="meta">{today}</span>
+		</div>
+		<div class="summary-dashboard">
+			<div class="metric cal">
+				<span class="label">Calories</span>
+				<span class="value">{Math.round(totals.cal)}</span>
 			</div>
-			<div class="summary-card">
-				<div class="label">protein</div>
-				<div class="value">{totals.protein}<span class="unit">g</span></div>
+			<div class="metric pro">
+				<span class="label">Protein</span>
+				<span class="value">{totals.protein}g</span>
 			</div>
-			<div class="summary-card">
-				<div class="label">fat</div>
-				<div class="value">{totals.fat}<span class="unit">g</span></div>
+			<div class="metric fat">
+				<span class="label">Fat</span>
+				<span class="value">{totals.fat}g</span>
 			</div>
-			<div class="summary-card">
-				<div class="label">carbs</div>
-				<div class="value">{totals.carbs}<span class="unit">g</span></div>
-			</div>
-			<div class="summary-card">
-				<div class="label">fiber</div>
-				<div class="value">{totals.fiber}<span class="unit">g</span></div>
+			<div class="metric carb">
+				<span class="label">Carbs</span>
+				<span class="value">{totals.carbs}g</span>
 			</div>
 		</div>
-	{/if}
+	</header>
+
+	<main class="log-area chat-area" bind:this={chatArea}>
+		{#if meals.length > 0}
+			<div class="chat-thread">
+				<div class="chat-intro">Tracker started. Log your meals below.</div>
+				{#each meals as meal}
+					<div class="chat-bubble user">
+						{meal.rawInput || 'Logged items'}
+					</div>
+					<div class="chat-bubble system">
+						<table class="chat-table">
+							<thead>
+								<tr>
+									<th>item</th>
+									<th class="num">qty</th>
+									<th class="num">cal</th>
+									<th class="num">pro</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each meal.items as item}
+								<tr>
+									<td>{item.name}</td>
+									<td class="num">{item.qty_g}g</td>
+									<td class="num">{Math.round(item.cal)}</td>
+									<td class="num">{item.protein}g</td>
+								</tr>
+								{/each}
+							</tbody>
+						</table>
+						<div class="system-actions">
+							<button class="text-btn" onclick={() => deleteMealEntry(meal.id)}>delete</button>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{:else}
+			<div class="empty">
+				<div>what did you eat today?</div>
+				<div class="hint">try "200g chicken and 1 cup rice"</div>
+			</div>
+		{/if}
+	</main>
 
 	<div class="input-section">
+		{#if status}
+			<div class="status {status.type}">{status.message}</div>
+		{/if}
 		<div class="input-row">
 			<input
 				type="text"
 				bind:value={input}
 				onkeydown={handleKeydown}
-				placeholder="200g chicken, 2 roti, dal 1 bowl"
+				placeholder="Message tracker..."
+				aria-label="What did you eat?"
 				disabled={loading}
 			/>
 			<button onclick={handleSubmit} disabled={loading || !input.trim()}>
-				{loading ? 'looking up...' : 'add'}
+				{loading ? '...' : 'send'}
 			</button>
 		</div>
-		<div class="input-hint">comma-separated. quantities in grams, pieces, cups, bowls, etc.</div>
 	</div>
-
-	{#if status}
-		<div class="status {status.type}">{status.message}</div>
-	{/if}
-
-	{#if items.length > 0}
-		<div class="table-section">
-			<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem;">
-				<h2>today</h2>
-				<button class="remove-btn" style="font-size: 0.75rem; color: var(--text-dim); background: none; border: none; cursor: pointer;" onclick={clearAll}>
-					clear all
-				</button>
-			</div>
-			<table class="meal-table">
-				<thead>
-					<tr>
-						<th></th>
-						<th>food</th>
-						<th class="num">qty</th>
-						<th class="num">cal</th>
-						<th class="num">protein</th>
-						<th class="num">fat</th>
-						<th class="num">carbs</th>
-						<th class="num">fiber</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each items as item, i}
-						<tr>
-							<td>
-								<button class="remove-btn" onclick={() => removeItem(i)}>x</button>
-							</td>
-							<td class="food-name">{item.name}</td>
-							<td class="qty">{item.qty_g}g</td>
-							<td class="num">{Math.round(item.cal)}</td>
-							<td class="num">{item.protein}</td>
-							<td class="num">{item.fat}</td>
-							<td class="num">{item.carbs}</td>
-							<td class="num">{item.fiber}</td>
-						</tr>
-					{/each}
-					<tr class="total-row">
-						<td></td>
-						<td>total</td>
-						<td></td>
-						<td class="num">{Math.round(totals.cal)}</td>
-						<td class="num">{totals.protein}</td>
-						<td class="num">{totals.fat}</td>
-						<td class="num">{totals.carbs}</td>
-						<td class="num">{totals.fiber}</td>
-					</tr>
-				</tbody>
-			</table>
-		</div>
-
-		<div class="text-summary">
-			{#if summaryLoading}
-				<p class="summary-loading">thinking...</p>
-			{:else if summary}
-				<p>{summary}</p>
-			{:else}
-				<p>
-					{items.length} item{items.length === 1 ? '' : 's'} logged —
-					{Math.round(totals.cal)} cal,
-					{totals.protein}g protein,
-					{totals.fat}g fat,
-					{totals.carbs}g carbs,
-					{totals.fiber}g fiber.
-				</p>
-			{/if}
-		</div>
-	{:else}
-		<div class="empty">
-			<div>nothing logged yet</div>
-			<div class="hint">type what you ate above</div>
-		</div>
-	{/if}
-
-	<footer class="footer">
-		<span>foods known: <span class="db-count">{dbCount}</span></span>
-		<span>new foods fetched via gemini, cached locally</span>
-	</footer>
 </div>
