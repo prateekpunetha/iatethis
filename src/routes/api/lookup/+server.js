@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent';
 
 const SYSTEM_PROMPT = `You are a nutrition database. Given a food item, return ONLY valid JSON with its nutritional information per 100 grams. No markdown, no explanation, no code fences — just the raw JSON object.
 
