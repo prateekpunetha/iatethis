@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { GEMINI_API_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
@@ -29,7 +29,8 @@ Rules:
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request }) {
-	if (!GEMINI_API_KEY) {
+	const apiKey = env.GEMINI_API_KEY;
+	if (!apiKey) {
 		return json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
 	}
 
@@ -40,7 +41,7 @@ export async function POST({ request }) {
 	}
 
 	try {
-		const res = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+		const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
