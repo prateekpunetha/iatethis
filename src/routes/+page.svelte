@@ -460,7 +460,7 @@
 							<div class="log-entry" style="animation-delay: {(mealIdx * meal.items.length + itemIdx) * 50}ms">
 								<div class="log-entry-left">
 									<div class="log-entry-icon" style="color: var(--{mealColors[(mealIdx + itemIdx) % mealColors.length]});">
-										<span class="material-symbols-outlined">{mealIcons[(mealIdx + itemIdx) % mealIcons.length]}</span>
+										<span class="material-symbols-outlined">{getFoodIcon(item)}</span>
 									</div>
 									<div>
 										<div class="log-entry-name">{item.name}</div>
