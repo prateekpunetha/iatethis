@@ -71,16 +71,44 @@
 		coffee: 'coffee',
 		tea: 'emoji_food_beverage',
 		egg: 'egg_alt',
-		chicken: 'lunch_dining',
+		chicken: 'kebab_dining',
+		meat: 'kebab_dining',
+		beef: 'kebab_dining',
+		mutton: 'kebab_dining',
+		fish: 'set_meal',
+		prawn: 'set_meal',
 		rice: 'rice_bowl',
 		bread: 'bakery_dining',
+		roti: 'bakery_dining',
+		naan: 'bakery_dining',
 		milk: 'water_drop',
-		fruit: 'nutrition',
+		curd: 'soup_kitchen',
+		yogurt: 'soup_kitchen',
+		cheese: 'local_pizza',
+		paneer: 'local_pizza',
+		fruit: 'eco',
+		apple: 'eco',
+		banana: 'eco',
+		mango: 'eco',
 		pizza: 'local_pizza',
+		protein: 'fitness_center',
+		whey: 'fitness_center',
+		dal: 'soup_kitchen',
+		soup: 'soup_kitchen',
+		salad: 'eco',
+		vegetable: 'eco',
+		aloo: 'eco',
+		palak: 'eco',
+		water: 'water_drop',
+		drink: 'local_drink',
+		juice: 'local_drink',
+		cake: 'cake',
+		sweet: 'cake',
+		icecream: 'icecream'
 	};
 
-	function getFoodIcon(name) {
-		const lower = name.toLowerCase();
+	function getFoodIcon(item) {
+		const lower = (item.name || '').toLowerCase();
 		for (const [key, icon] of Object.entries(foodIcons)) {
 			if (key !== 'default' && lower.includes(key)) return icon;
 		}
@@ -230,6 +258,7 @@
 					fat: round1((macros.fat || 0) * factor),
 					carbs: round1((macros.carbs || 0) * factor),
 					fiber: round1((macros.fiber || 0) * factor),
+					icon: food.icon,
 					source
 				});
 
@@ -496,7 +525,7 @@
 						<div class="log-list-item" style="animation-delay: {i * 30}ms">
 							<div class="log-list-item-left">
 								<div class="log-list-item-icon" style="color: var(--secondary);">
-									<span class="material-symbols-outlined">{getFoodIcon(food.name)}</span>
+									<span class="material-symbols-outlined">{getFoodIcon(food)}</span>
 								</div>
 								<div>
 									<p class="log-list-item-name">{food.name}</p>
@@ -532,7 +561,7 @@
 								<div class="log-list-item" style="animation-delay: {(i + j) * 30}ms">
 									<div class="log-list-item-left">
 										<div class="log-list-item-icon" style="color: var(--{['secondary', 'tertiary', 'primary'][(i + j) % 3]});">
-											<span class="material-symbols-outlined">{getFoodIcon(item.name)}</span>
+											<span class="material-symbols-outlined">{getFoodIcon(item)}</span>
 										</div>
 										<div>
 											<p class="log-list-item-name">{item.name}</p>
@@ -559,7 +588,7 @@
 							<div class="frequent-card" style="animation-delay: {i * 50}ms">
 								<div class="frequent-card-top">
 									<div class="frequent-card-icon" style="background: color-mix(in srgb, var(--{['primary', 'secondary', 'tertiary', 'primary'][i % 4]}) 20%, transparent); color: var(--{['primary', 'secondary', 'tertiary', 'primary'][i % 4]});">
-										<span class="material-symbols-outlined" style="font-size: 18px;">{getFoodIcon(food.name)}</span>
+										<span class="material-symbols-outlined" style="font-size: 18px;">{getFoodIcon(food)}</span>
 									</div>
 									<span class="frequent-card-badge">{food.times_used}× used</span>
 								</div>

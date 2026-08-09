@@ -39,6 +39,8 @@ const UNIT_MAP = {
 	'scoop': 'scoop',
 	'scoops': 'scoop',
 	'handful': 'handful',
+	'spoon': 'spoon',
+	'spoons': 'spoon',
 };
 
 /* rough gram equivalents for non-gram units */
@@ -46,6 +48,7 @@ const UNIT_TO_GRAMS = {
 	'cup': 200,
 	'tbsp': 15,
 	'tsp': 5,
+	'spoon': 15,
 	'bowl': 200,
 	'plate': 300,
 	'glass': 250,
