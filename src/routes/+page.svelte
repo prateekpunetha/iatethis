@@ -186,6 +186,15 @@
 	}
 </script>
 
+<!--
+THESIS: A fast, text-driven macro ledger fully adopting the Material You design system.
+OWN-WORLD: Material You Dark theme with a purple seed. Deep surface colors (#141218), large rounded corners (24px cards, 100px buttons), prominent tonal accents, and standard Roboto typography.
+STORY: The visitor enters food in natural language and receives an immediate, beautifully structured Material card tracking their cumulative macros.
+FIRST VIEWPORT: The top holds a clean 4-up metric dashboard in M3 surface containers. Below, a scrollable chat thread composed of distinct, deeply rounded M3 surface-container message bubbles. The bottom holds a pill-shaped input bar.
+FORM: Material You (User-Pinned)
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->
+
 <div class="app-layout">
 	<header class="header">
 		<div class="title-bar">
