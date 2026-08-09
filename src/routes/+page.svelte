@@ -1,7 +1,7 @@
 <script>
 	import { onMount, tick } from 'svelte';
 	import { parseInput, toGrams } from '$lib/parser.js';
-	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal } from '$lib/db.js';
+	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal, getAllMeals, getFrequentFoods, searchFoods } from '$lib/db.js';
 	import { SEED_FOODS } from '$lib/seeds.js';
 
 	let input = $state('');
@@ -10,6 +10,14 @@
 	let dbCount = $state(0);
 	let loading = $state(false);
 	let theme = $state('dark');
+	let activeTab = $state('daily');
+
+	/* Log tab state */
+	let searchQuery = $state('');
+	let searchResults = $state([]);
+	let recentMeals = $state([]);
+	let frequentFoods = $state([]);
+	let searching = $state(false);
 
 	/* Macro goals (daily targets) */
 	const goals = {
@@ -57,6 +65,28 @@
 	const mealIcons = ['local_cafe', 'breakfast_dining', 'lunch_dining', 'dinner_dining', 'restaurant', 'bakery_dining'];
 	const mealColors = ['primary', 'secondary', 'tertiary', 'primary', 'secondary', 'tertiary'];
 
+	/* Food category icons */
+	const foodIcons = {
+		default: 'restaurant',
+		coffee: 'coffee',
+		tea: 'emoji_food_beverage',
+		egg: 'egg_alt',
+		chicken: 'lunch_dining',
+		rice: 'rice_bowl',
+		bread: 'bakery_dining',
+		milk: 'water_drop',
+		fruit: 'nutrition',
+		pizza: 'local_pizza',
+	};
+
+	function getFoodIcon(name) {
+		const lower = name.toLowerCase();
+		for (const [key, icon] of Object.entries(foodIcons)) {
+			if (key !== 'default' && lower.includes(key)) return icon;
+		}
+		return foodIcons.default;
+	}
+
 	onMount(async () => {
 		await seedIfEmpty(SEED_FOODS);
 		await loadTodaysMeals();
@@ -78,6 +108,58 @@
 	async function loadTodaysMeals() {
 		meals = await getTodaysMeals();
 	}
+
+	async function switchTab(tab) {
+		activeTab = tab;
+		if (tab === 'log') {
+			await loadLogData();
+		}
+	}
+
+	async function loadLogData() {
+		recentMeals = await getAllMeals();
+		frequentFoods = await getFrequentFoods(6);
+	}
+
+	async function handleSearch() {
+		const q = searchQuery.trim();
+		if (!q) {
+			searchResults = [];
+			return;
+		}
+		searching = true;
+		searchResults = await searchFoods(q);
+		searching = false;
+	}
+
+	function formatDate(dateStr) {
+		const d = new Date(dateStr);
+		const now = new Date();
+		const todayStr = now.toISOString().split('T')[0];
+		const yesterdayDate = new Date(now);
+		yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+		const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+		const mealDate = dateStr.split ? dateStr.split('T')[0] : new Date(dateStr).toISOString().split('T')[0];
+
+		if (mealDate === todayStr) return 'Today';
+		if (mealDate === yesterdayStr) return 'Yesterday';
+		return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+	}
+
+	function formatTime(dateStr) {
+		return new Date(dateStr).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+	}
+
+	/* Group meals by date for the log view */
+	let groupedMeals = $derived.by(() => {
+		const groups = {};
+		for (const meal of recentMeals) {
+			const date = meal.date || new Date(meal.logged_at).toISOString().split('T')[0];
+			if (!groups[date]) groups[date] = [];
+			groups[date].push(meal);
+		}
+		return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+	});
 
 	async function handleSubmit() {
 		if (!input.trim() || loading) return;
@@ -175,6 +257,10 @@
 	async function deleteMealEntry(id) {
 		await deleteMeal(id);
 		await loadTodaysMeals();
+		/* Also refresh log data if on log tab */
+		if (activeTab === 'log') {
+			await loadLogData();
+		}
 	}
 
 	async function clearAll() {
@@ -219,17 +305,17 @@
 		</div>
 	</header>
 
+	<!-- DAILY TAB -->
+	{#if activeTab === 'daily'}
 	<main class="main-content">
 		<!-- Progress Ring -->
 		<section class="ring-section">
 			<div class="ring-container">
 				<svg class="ring-svg" viewBox="0 0 120 120">
-					<!-- Background track -->
 					<circle
 						class="ring-track"
 						cx="60" cy="60" r={ringRadius}
 					></circle>
-					<!-- Progress arc -->
 					<circle
 						class="ring-progress"
 						cx="60" cy="60" r={ringRadius}
@@ -258,7 +344,6 @@
 
 		<!-- Macro Cards Grid -->
 		<section class="macro-grid">
-			<!-- Protein -->
 			<div class="macro-card protein">
 				<div class="macro-card-header">
 					<span class="macro-card-label">Protein</span>
@@ -273,7 +358,6 @@
 				</div>
 			</div>
 
-			<!-- Carbs -->
 			<div class="macro-card carbs">
 				<div class="macro-card-header">
 					<span class="macro-card-label">Carbs</span>
@@ -288,7 +372,6 @@
 				</div>
 			</div>
 
-			<!-- Fat -->
 			<div class="macro-card fat">
 				<div class="macro-card-header">
 					<span class="macro-card-label">Fat</span>
@@ -303,7 +386,6 @@
 				</div>
 			</div>
 
-			<!-- Fiber -->
 			<div class="macro-card fiber">
 				<div class="macro-card-header">
 					<span class="macro-card-label">Fiber</span>
@@ -372,9 +454,6 @@
 						{/each}
 					{/each}
 				</div>
-				{#if meals.length > 3}
-					<button class="view-full-log-btn">View Full Log</button>
-				{/if}
 			</section>
 		{:else if !loading}
 			<section class="empty-state">
@@ -386,22 +465,151 @@
 			</section>
 		{/if}
 	</main>
+	{/if}
+
+	<!-- LOG TAB -->
+	{#if activeTab === 'log'}
+	<main class="main-content">
+		<!-- Search Bar -->
+		<section class="search-bar">
+			<span class="material-symbols-outlined search-bar-icon">search</span>
+			<input
+				type="text"
+				bind:value={searchQuery}
+				oninput={handleSearch}
+				placeholder="Search for food, macros, or meals..."
+				class="search-bar-input"
+			/>
+			{#if searchQuery}
+				<button class="icon-btn" style="color: var(--on-surface-variant);" onclick={() => { searchQuery = ''; searchResults = []; }}>
+					<span class="material-symbols-outlined" style="font-size: 20px;">close</span>
+				</button>
+			{/if}
+		</section>
+
+		<!-- Search Results -->
+		{#if searchQuery && searchResults.length > 0}
+			<section>
+				<h2 class="log-section-title">Results</h2>
+				<div class="log-list-card">
+					{#each searchResults as food, i}
+						<div class="log-list-item" style="animation-delay: {i * 30}ms">
+							<div class="log-list-item-left">
+								<div class="log-list-item-icon" style="color: var(--secondary);">
+									<span class="material-symbols-outlined">{getFoodIcon(food.name)}</span>
+								</div>
+								<div>
+									<p class="log-list-item-name">{food.name}</p>
+									<p class="log-list-item-sub">per 100g</p>
+								</div>
+							</div>
+							<div class="log-list-item-right">
+								<p class="log-list-item-cal">{Math.round(food.per_100g?.cal || 0)}</p>
+								<p class="log-list-item-cal-unit">kcal</p>
+							</div>
+						</div>
+					{/each}
+				</div>
+			</section>
+		{:else if searchQuery && searchResults.length === 0 && !searching}
+			<div class="empty-state" style="padding: 2rem 1rem;">
+				<div class="empty-state-icon">
+					<span class="material-symbols-outlined">search_off</span>
+				</div>
+				<div class="empty-state-title">No foods found</div>
+				<div class="empty-state-hint">Try logging it from the Daily tab to learn it</div>
+			</div>
+		{/if}
+
+		<!-- Recent Meals (show when not searching) -->
+		{#if !searchQuery}
+			{#if recentMeals.length > 0}
+				<section>
+					<h2 class="log-section-title">Recent</h2>
+					<div class="log-list-card">
+						{#each recentMeals.slice(0, 8) as meal, i}
+							{#each meal.items as item, j}
+								<div class="log-list-item" style="animation-delay: {(i + j) * 30}ms">
+									<div class="log-list-item-left">
+										<div class="log-list-item-icon" style="color: var(--{['secondary', 'tertiary', 'primary'][(i + j) % 3]});">
+											<span class="material-symbols-outlined">{getFoodIcon(item.name)}</span>
+										</div>
+										<div>
+											<p class="log-list-item-name">{item.name}</p>
+											<p class="log-list-item-sub">{formatQty(item)} · {formatDate(meal.logged_at)}</p>
+										</div>
+									</div>
+									<div class="log-list-item-right">
+										<p class="log-list-item-cal">{Math.round(item.cal)}</p>
+										<p class="log-list-item-cal-unit">kcal</p>
+									</div>
+								</div>
+							{/each}
+						{/each}
+					</div>
+				</section>
+			{/if}
+
+			<!-- Frequent Foods -->
+			{#if frequentFoods.length > 0}
+				<section>
+					<h2 class="log-section-title">Frequent</h2>
+					<div class="frequent-grid">
+						{#each frequentFoods.slice(0, 4) as food, i}
+							<div class="frequent-card" style="animation-delay: {i * 50}ms">
+								<div class="frequent-card-top">
+									<div class="frequent-card-icon" style="background: color-mix(in srgb, var(--{['primary', 'secondary', 'tertiary', 'primary'][i % 4]}) 20%, transparent); color: var(--{['primary', 'secondary', 'tertiary', 'primary'][i % 4]});">
+										<span class="material-symbols-outlined" style="font-size: 18px;">{getFoodIcon(food.name)}</span>
+									</div>
+									<span class="frequent-card-badge">{food.times_used}× used</span>
+								</div>
+								<div class="frequent-card-body">
+									<p class="frequent-card-name">{food.name}</p>
+									<p class="frequent-card-cal">
+										{Math.round(food.per_100g?.cal || 0)}
+										<span class="frequent-card-cal-unit">kcal/100g</span>
+									</p>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</section>
+			{/if}
+
+			<!-- Empty log state -->
+			{#if recentMeals.length === 0 && frequentFoods.length === 0}
+				<div class="empty-state">
+					<div class="empty-state-icon">
+						<span class="material-symbols-outlined">history</span>
+					</div>
+					<div class="empty-state-title">No meals logged yet</div>
+					<div class="empty-state-hint">Your food history will appear here</div>
+				</div>
+			{/if}
+		{/if}
+	</main>
+
+	<!-- FAB for quick add -->
+	<button class="fab" onclick={() => switchTab('daily')} aria-label="Quick add food">
+		<span class="material-symbols-outlined">add</span>
+	</button>
+	{/if}
 
 	<!-- Bottom Navigation Bar -->
 	<nav class="bottom-nav">
-		<button class="nav-btn active" aria-label="Daily">
+		<button class="nav-btn {activeTab === 'daily' ? 'active' : ''}" aria-label="Daily" onclick={() => switchTab('daily')}>
 			<span class="material-symbols-outlined">dashboard</span>
 			<span class="nav-btn-label">Daily</span>
 		</button>
-		<button class="nav-btn" aria-label="Log">
+		<button class="nav-btn {activeTab === 'log' ? 'active' : ''}" aria-label="Log" onclick={() => switchTab('log')}>
 			<span class="material-symbols-outlined">list_alt</span>
 			<span class="nav-btn-label">Log</span>
 		</button>
-		<button class="nav-btn" aria-label="Insights">
+		<button class="nav-btn {activeTab === 'insights' ? 'active' : ''}" aria-label="Insights" onclick={() => switchTab('insights')}>
 			<span class="material-symbols-outlined">insights</span>
 			<span class="nav-btn-label">Insights</span>
 		</button>
-		<button class="nav-btn" aria-label="Profile">
+		<button class="nav-btn {activeTab === 'profile' ? 'active' : ''}" aria-label="Profile" onclick={() => switchTab('profile')}>
 			<span class="material-symbols-outlined">person</span>
 			<span class="nav-btn-label">Profile</span>
 		</button>

@@ -135,6 +135,35 @@ export async function getAllFoods() {
 	return db.getAll('foods');
 }
 
+/** Get all meals, sorted newest first */
+export async function getAllMeals() {
+	const db = await getDB();
+	const all = await db.getAll('meals');
+	return all.sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at));
+}
+
+/** Get frequently used foods, sorted by times_used desc */
+export async function getFrequentFoods(limit = 10) {
+	const db = await getDB();
+	const all = await db.getAll('foods');
+	return all
+		.filter(f => (f.times_used || 0) > 0)
+		.sort((a, b) => (b.times_used || 0) - (a.times_used || 0))
+		.slice(0, limit);
+}
+
+/** Search foods by name */
+export async function searchFoods(query) {
+	const db = await getDB();
+	const all = await db.getAll('foods');
+	const q = query.toLowerCase().trim();
+	if (!q) return [];
+	return all.filter(f => 
+		f.name.toLowerCase().includes(q) ||
+		(f.aliases || []).some(a => a.toLowerCase().includes(q))
+	).slice(0, 20);
+}
+
 /** Seed the database with initial foods (only if empty) */
 export async function seedIfEmpty(foods) {
 	const db = await getDB();
