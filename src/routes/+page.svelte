@@ -9,6 +9,7 @@
 	let status = $state(null); // { type: 'loading'|'error'|'success', message: '' }
 	let dbCount = $state(0);
 	let loading = $state(false);
+	let theme = $state('system');
 	
 	let chatArea;
 
@@ -64,7 +65,24 @@
 		await seedIfEmpty(SEED_FOODS);
 		await loadTodaysMeals();
 		dbCount = (await getAllFoods()).length;
+
+		const savedTheme = localStorage.getItem('theme');
+		if (savedTheme) {
+			theme = savedTheme;
+			document.documentElement.setAttribute('data-theme', theme);
+		}
 	});
+
+	function toggleTheme() {
+		if (theme === 'system') {
+			const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+			theme = isDark ? 'light' : 'dark';
+		} else {
+			theme = theme === 'dark' ? 'light' : 'dark';
+		}
+		localStorage.setItem('theme', theme);
+		document.documentElement.setAttribute('data-theme', theme);
+	}
 
 	async function loadTodaysMeals() {
 		meals = await getTodaysMeals();
@@ -199,7 +217,18 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	<header class="header">
 		<div class="title-bar">
 			<h1>iatethis</h1>
-			<span class="meta">{today}</span>
+			<div style="display: flex; gap: 0.75rem; align-items: center;">
+				<span class="meta">{today}</span>
+				<button class="text-btn" style="padding: 0.25rem; font-size: 1.15rem;" onclick={toggleTheme} aria-label="Toggle theme">
+					{#if theme === 'dark'}
+						☀️
+					{:else if theme === 'light'}
+						🌙
+					{:else}
+						🌗
+					{/if}
+				</button>
+			</div>
 		</div>
 		<div class="summary-dashboard">
 			<div class="metric cal">
