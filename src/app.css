@@ -141,7 +141,7 @@ body {
 
 .summary-dashboard {
 	display: grid;
-	grid-template-columns: repeat(4, 1fr);
+	grid-template-columns: repeat(5, 1fr);
 	gap: 0.5rem;
 }
 
@@ -164,6 +164,21 @@ body {
 .metric.pro {
 	background: var(--md-secondary-container);
 	color: var(--md-on-secondary-container);
+}
+
+.metric.fat {
+	background: var(--md-surface-variant);
+	color: var(--md-on-surface-variant);
+}
+
+.metric.carb {
+	background: rgba(208, 188, 255, 0.15);
+	color: var(--md-on-surface-variant);
+}
+
+.metric.fib {
+	background: rgba(204, 194, 220, 0.15);
+	color: var(--md-on-surface-variant);
 }
 
 .metric .label {
@@ -254,7 +269,7 @@ body {
 
 .chat-table th:nth-child(1),
 .chat-table td:nth-child(1) {
-	width: 45%;
+	width: 28%;
 	word-wrap: break-word;
 	overflow-wrap: break-word;
 	hyphens: auto;

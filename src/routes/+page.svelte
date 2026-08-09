@@ -252,6 +252,10 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 				<span class="label">Carbs</span>
 				<span class="value">{totals.carbs}g</span>
 			</div>
+			<div class="metric fib">
+				<span class="label">Fiber</span>
+				<span class="value">{totals.fiber}g</span>
+			</div>
 		</div>
 
 	</header>
@@ -274,7 +278,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 				<div class="chat-bubble system">
 					<div class="reply-header">
-						Added {meal.items.map(i => `${i.name} (${Math.round(i.cal)} cal, ${i.protein}g pro)`).join(', ')}. Here is your updated diet:
+						Added {meal.items.map(i => `${i.name} (${Math.round(i.cal)}c, ${i.protein}p, ${i.fat}f, ${i.carbs}c, ${i.fiber || 0}fb)`).join(', ')}. Here is your updated diet:
 					</div>
 					<table class="chat-table">
 						<thead>
@@ -283,6 +287,9 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 								<th class="num">qty</th>
 								<th class="num">cal</th>
 								<th class="num">pro</th>
+								<th class="num">fat</th>
+								<th class="num">crb</th>
+								<th class="num">fib</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -298,7 +305,10 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 										{/if}
 									</td>
 									<td class="num">{Math.round(item.cal)}</td>
-									<td class="num">{item.protein}g</td>
+									<td class="num">{item.protein}</td>
+									<td class="num">{item.fat}</td>
+									<td class="num">{item.carbs}</td>
+									<td class="num">{item.fiber || 0}</td>
 								</tr>
 								{/each}
 							{/if}
