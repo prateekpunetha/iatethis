@@ -13,9 +13,9 @@
 
 	/* Macro goals (daily targets) */
 	const goals = {
-		cal: 2200,
+		cal: 2800,
 		protein: 150,
-		carbs: 200,
+		carbs: 300,
 		fat: 80,
 		fiber: 30
 	};
@@ -325,14 +325,11 @@
 				<div class="status-bar {status.type}">{status.message}</div>
 			{/if}
 			<div class="glass-input">
-				<div class="input-icon-wrap">
-					<span class="material-symbols-outlined">add_comment</span>
-				</div>
 				<input
 					type="text"
 					bind:value={input}
 					onkeydown={handleKeydown}
-					placeholder="I ate 349 ml sugarcane juice..."
+					placeholder="2 eggs, a cup of rice and dal..."
 					aria-label="What did you eat?"
 					disabled={loading}
 				/>
