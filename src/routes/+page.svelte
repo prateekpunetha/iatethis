@@ -136,6 +136,11 @@
 						source = 'gemini';
 						dbCount = (await getAllFoods()).length;
 					} catch (e) {
+						if (!navigator.onLine) {
+							status = { type: 'error', message: `You are offline! Connect just once to learn "${item.name}". After that, you can log it offline forever.` };
+							loading = false;
+							return;
+						}
 						missed.push(item.name);
 						continue;
 					}
