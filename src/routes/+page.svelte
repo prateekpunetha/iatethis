@@ -20,6 +20,10 @@
 	let searching = $state(false);
 	let expandedDate = $state(null); // which date card is expanded
 
+	/* PWA Install state */
+	let deferredPrompt = null;
+	let showInstallBanner = $state(false);
+
 	/* Insights tab state */
 	let insightsMeals = $state([]);
 
@@ -294,7 +298,35 @@
 			theme = savedTheme;
 			document.documentElement.setAttribute('data-theme', theme);
 		}
+
+		/* Listen for PWA install prompt */
+		window.addEventListener('beforeinstallprompt', (e) => {
+			e.preventDefault();
+			deferredPrompt = e;
+			
+			// Only show if they haven't dismissed it and they have logged at least one meal
+			const dismissed = localStorage.getItem('iatethis_install_dismissed');
+			if (!dismissed && meals.length > 0) {
+				showInstallBanner = true;
+			}
+		});
 	});
+
+	async function triggerInstall() {
+		if (!deferredPrompt) return;
+		showInstallBanner = false;
+		deferredPrompt.prompt();
+		const { outcome } = await deferredPrompt.userChoice;
+		if (outcome === 'accepted') {
+			console.log('User accepted the A2HS prompt');
+		}
+		deferredPrompt = null;
+	}
+
+	function dismissInstall() {
+		showInstallBanner = false;
+		localStorage.setItem('iatethis_install_dismissed', 'true');
+	}
 
 	function toggleTheme() {
 		theme = theme === 'dark' ? 'light' : 'dark';
@@ -1106,6 +1138,26 @@
 			<span>{dbCount} foods learned</span>
 		</div>
 	</main>
+	{/if}
+
+	<!-- PWA Install Banner -->
+	{#if showInstallBanner}
+		<div class="install-banner">
+			<div class="install-banner-content">
+				<div class="install-banner-icon">
+					<img src="/favicon.png" alt="App Icon" style="width: 100%; height: 100%; border-radius: 8px;" onerror={(e) => e.target.style.display = 'none'} />
+					<span class="material-symbols-outlined fallback-icon">restaurant</span>
+				</div>
+				<div class="install-banner-text">
+					<p class="install-banner-title">Add iatethis to Home Screen</p>
+					<p class="install-banner-sub">Log your meals faster and completely offline.</p>
+				</div>
+			</div>
+			<div class="install-banner-actions">
+				<button class="install-btn-secondary" onclick={dismissInstall}>Not now</button>
+				<button class="install-btn-primary" onclick={triggerInstall}>Install</button>
+			</div>
+		</div>
 	{/if}
 
 	<!-- Bottom Navigation Bar -->
