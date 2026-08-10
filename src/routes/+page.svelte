@@ -583,7 +583,7 @@
 	<!-- Top App Bar -->
 	<header class="header">
 		<div class="header-left">
-			<button class="icon-btn" style="color: var(--on-surface-variant);" onclick={() => isDrawerOpen = true}>
+			<button class="icon-btn" style="color: var(--on-surface-variant);" onclick={() => isDrawerOpen = true} aria-label="Open sidebar menu">
 				<span class="material-symbols-outlined">menu</span>
 			</button>
 			<h1>iatethis</h1>
@@ -605,7 +605,7 @@
 		<div class="drawer">
 			<div class="drawer-header">
 				<h2 class="drawer-title">iatethis</h2>
-				<button class="icon-btn" onclick={() => isDrawerOpen = false}>
+				<button class="icon-btn" onclick={() => isDrawerOpen = false} aria-label="Close sidebar menu">
 					<span class="material-symbols-outlined">close</span>
 				</button>
 			</div>
@@ -682,7 +682,7 @@
 					<span class="macro-card-goal">/ {goals.protein}g</span>
 				</div>
 				<div class="macro-bar-track">
-					<div class="macro-bar-fill" style="width: {Math.min(100, (totals.protein / goals.protein) * 100)}%"></div>
+					<div class="macro-bar-fill" style="transform: scaleX({Math.min(100, (totals.protein / goals.protein) * 100) / 100});"></div>
 				</div>
 			</div>
 
@@ -696,7 +696,7 @@
 					<span class="macro-card-goal">/ {goals.carbs}g</span>
 				</div>
 				<div class="macro-bar-track">
-					<div class="macro-bar-fill" style="width: {Math.min(100, (totals.carbs / goals.carbs) * 100)}%"></div>
+					<div class="macro-bar-fill" style="transform: scaleX({Math.min(100, (totals.carbs / goals.carbs) * 100) / 100});"></div>
 				</div>
 			</div>
 
@@ -710,7 +710,7 @@
 					<span class="macro-card-goal">/ {goals.fat}g</span>
 				</div>
 				<div class="macro-bar-track">
-					<div class="macro-bar-fill" style="width: {Math.min(100, (totals.fat / goals.fat) * 100)}%"></div>
+					<div class="macro-bar-fill" style="transform: scaleX({Math.min(100, (totals.fat / goals.fat) * 100) / 100});"></div>
 				</div>
 			</div>
 
@@ -724,7 +724,7 @@
 					<span class="macro-card-goal">/ {goals.fiber}g</span>
 				</div>
 				<div class="macro-bar-track">
-					<div class="macro-bar-fill" style="width: {Math.min(100, (totals.fiber / goals.fiber) * 100)}%"></div>
+					<div class="macro-bar-fill" style="transform: scaleX({Math.min(100, (totals.fiber / goals.fiber) * 100) / 100});"></div>
 				</div>
 			</div>
 		</section>
