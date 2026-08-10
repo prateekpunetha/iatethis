@@ -523,6 +523,12 @@
 		if (newItems.length > 0) {
 			await logMeal(newItems, rawInput);
 			await loadTodaysMeals();
+			
+			/* Trigger PWA install banner if applicable */
+			const dismissed = localStorage.getItem('iatethis_install_dismissed');
+			if (deferredPrompt && !dismissed) {
+				showInstallBanner = true;
+			}
 		}
 
 		if (missed.length > 0) {
