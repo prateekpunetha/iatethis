@@ -23,6 +23,11 @@ function normalize(name) {
 	return name.toLowerCase().trim().replace(/\s+/g, ' ');
 }
 
+/** Get local date string YYYY-MM-DD */
+function getLocalDateStr(date = new Date()) {
+	return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+}
+
 /** simple similarity score between two strings (0-1) */
 function similarity(a, b) {
 	a = normalize(a);
@@ -105,7 +110,7 @@ export async function bumpUsage(id) {
 /** Log a meal entry */
 export async function logMeal(items, rawInput = '') {
 	const db = await getDB();
-	const today = new Date().toISOString().split('T')[0];
+	const today = getLocalDateStr();
 	const entry = {
 		date: today,
 		rawInput,
@@ -138,7 +143,7 @@ export async function deleteMealItem(mealId, itemIdx) {
 /** Get all meals for today */
 export async function getTodaysMeals() {
 	const db = await getDB();
-	const today = new Date().toISOString().split('T')[0];
+	const today = getLocalDateStr();
 	const all = await db.getAllFromIndex('meals', 'date', today);
 	return all;
 }
@@ -201,7 +206,7 @@ export async function seedIfEmpty(foods) {
 /** Delete all meals for today */
 export async function clearTodaysMeals() {
 	const db = await getDB();
-	const today = new Date().toISOString().split('T')[0];
+	const today = getLocalDateStr();
 	const all = await db.getAllFromIndex('meals', 'date', today);
 	const tx = db.transaction('meals', 'readwrite');
 	for (const meal of all) {

@@ -4,6 +4,11 @@
 	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal, deleteMealItem, getAllMeals, getFrequentFoods, searchFoods, getMealsForDays } from '$lib/db.js';
 	import { SEED_FOODS } from '$lib/seeds.js';
 
+	/** Get local date string YYYY-MM-DD */
+	function getLocalDateStr(date = new Date()) {
+		return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+	}
+
 	let input = $state('');
 	let meals = $state([]); // { id, rawInput, items, logged_at }
 	let status = $state(null); // { type: 'loading'|'error'|'success', message: '' }
@@ -39,13 +44,13 @@
 		for (let i = 6; i >= 0; i--) {
 			const d = new Date(now);
 			d.setDate(d.getDate() - i);
-			const dateStr = d.toISOString().split('T')[0];
+			const dateStr = getLocalDateStr(d);
 			days.push({ label: dayNames[d.getDay()], date: dateStr, cal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
 		}
 		
 		// Fill in data from meals
 		for (const meal of insightsMeals) {
-			const mealDate = meal.date || new Date(meal.logged_at).toISOString().split('T')[0];
+			const mealDate = meal.date || getLocalDateStr(new Date(meal.logged_at));
 			const day = days.find(d => d.date === mealDate);
 			if (day) {
 				for (const item of meal.items) {
@@ -364,8 +369,8 @@
 		for (let i = 6; i >= 0; i--) {
 			const d = new Date(now);
 			d.setDate(d.getDate() - i);
-			const dateStr = d.toISOString().split('T')[0];
-			const dayMeals = recentMeals.filter(m => (m.date || new Date(m.logged_at).toISOString().split('T')[0]) === dateStr);
+			const dateStr = getLocalDateStr(d);
+			const dayMeals = recentMeals.filter(m => (m.date || getLocalDateStr(new Date(m.logged_at))) === dateStr);
 			const allItems = dayMeals.flatMap(m => m.items);
 			const totalCal = allItems.reduce((s, item) => s + (item.cal || 0), 0);
 			const totalProtein = allItems.reduce((s, item) => s + (item.protein || 0), 0);
@@ -415,11 +420,11 @@
 	function formatDate(dateStr) {
 		const d = new Date(dateStr);
 		const now = new Date();
-		const todayStr = now.toISOString().split('T')[0];
+		const todayStr = getLocalDateStr(now);
 		const yesterdayDate = new Date(now);
 		yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-		const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
-		const mealDate = dateStr.split ? dateStr.split('T')[0] : new Date(dateStr).toISOString().split('T')[0];
+		const yesterdayStr = getLocalDateStr(yesterdayDate);
+		const mealDate = dateStr.includes('T') ? getLocalDateStr(new Date(dateStr)) : dateStr;
 
 		if (mealDate === todayStr) return 'Today';
 		if (mealDate === yesterdayStr) return 'Yesterday';
@@ -434,7 +439,7 @@
 	let groupedMeals = $derived.by(() => {
 		const groups = {};
 		for (const meal of recentMeals) {
-			const date = meal.date || new Date(meal.logged_at).toISOString().split('T')[0];
+			const date = meal.date || getLocalDateStr(new Date(meal.logged_at));
 			if (!groups[date]) groups[date] = [];
 			groups[date].push(meal);
 		}
