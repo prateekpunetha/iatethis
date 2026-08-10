@@ -209,3 +209,14 @@ export async function clearTodaysMeals() {
 	}
 	await tx.done;
 }
+
+/** Get meals for the last N days, grouped by date */
+export async function getMealsForDays(days = 7) {
+	const db = await getDB();
+	const all = await db.getAll('meals');
+	const cutoff = new Date();
+	cutoff.setDate(cutoff.getDate() - days);
+	cutoff.setHours(0, 0, 0, 0);
+	return all.filter(m => new Date(m.logged_at) >= cutoff)
+		.sort((a, b) => new Date(a.logged_at) - new Date(b.logged_at));
+}

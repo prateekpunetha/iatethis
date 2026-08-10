@@ -1,7 +1,7 @@
 <script>
 	import { onMount, tick } from 'svelte';
 	import { parseInput, toGrams } from '$lib/parser.js';
-	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal, deleteMealItem, getAllMeals, getFrequentFoods, searchFoods } from '$lib/db.js';
+	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal, deleteMealItem, getAllMeals, getFrequentFoods, searchFoods, getMealsForDays } from '$lib/db.js';
 	import { SEED_FOODS } from '$lib/seeds.js';
 
 	let input = $state('');
@@ -18,6 +18,90 @@
 	let recentMeals = $state([]);
 	let frequentFoods = $state([]);
 	let searching = $state(false);
+
+	/* Insights tab state */
+	let insightsMeals = $state([]);
+
+	let insightsData = $derived.by(() => {
+		const now = new Date();
+		const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+		
+		// Build last 7 days
+		const days = [];
+		for (let i = 6; i >= 0; i--) {
+			const d = new Date(now);
+			d.setDate(d.getDate() - i);
+			const dateStr = d.toISOString().split('T')[0];
+			days.push({ label: dayNames[d.getDay()], date: dateStr, cal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+		}
+		
+		// Fill in data from meals
+		for (const meal of insightsMeals) {
+			const mealDate = meal.date || new Date(meal.logged_at).toISOString().split('T')[0];
+			const day = days.find(d => d.date === mealDate);
+			if (day) {
+				for (const item of meal.items) {
+					day.cal += item.cal || 0;
+					day.protein += item.protein || 0;
+					day.carbs += item.carbs || 0;
+					day.fat += item.fat || 0;
+					day.fiber += item.fiber || 0;
+				}
+			}
+		}
+		
+		// Compute aggregates
+		const daysWithData = days.filter(d => d.cal > 0);
+		const totalDays = daysWithData.length || 1;
+		const avgCal = Math.round(daysWithData.reduce((s, d) => s + d.cal, 0) / totalDays);
+		const avgProtein = Math.round(daysWithData.reduce((s, d) => s + d.protein, 0) / totalDays);
+		const maxCal = Math.max(...days.map(d => d.cal), 1);
+		
+		// Macro totals for donut
+		const totalProtein = daysWithData.reduce((s, d) => s + d.protein, 0);
+		const totalCarbs = daysWithData.reduce((s, d) => s + d.carbs, 0);
+		const totalFat = daysWithData.reduce((s, d) => s + d.fat, 0);
+		const macroTotal = totalProtein + totalCarbs + totalFat || 1;
+		
+		// Days where calorie goal was met
+		const targetsHit = daysWithData.filter(d => d.cal >= goals.cal * 0.8).length;
+		
+		// Streak (consecutive days with data from today backwards)
+		let streak = 0;
+		for (let i = days.length - 1; i >= 0; i--) {
+			if (days[i].cal > 0) streak++;
+			else break;
+		}
+		
+		// Top food
+		const foodCounts = {};
+		for (const meal of insightsMeals) {
+			for (const item of meal.items) {
+				foodCounts[item.name] = (foodCounts[item.name] || 0) + 1;
+			}
+		}
+		const topFood = Object.entries(foodCounts).sort((a, b) => b[1] - a[1])[0];
+		
+		// Date range label
+		const startDate = new Date(days[0].date);
+		const endDate = new Date(days[6].date);
+		const dateRange = `${startDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}`;
+		
+		return {
+			days,
+			avgCal,
+			avgProtein,
+			maxCal,
+			proteinPct: Math.round((totalProtein / macroTotal) * 100),
+			carbsPct: Math.round((totalCarbs / macroTotal) * 100),
+			fatPct: Math.round((totalFat / macroTotal) * 100),
+			targetsHit,
+			totalDays,
+			streak,
+			topFood: topFood ? topFood[0] : '—',
+			dateRange
+		};
+	});
 
 	/* Macro goals (daily targets) */
 	const goals = {
@@ -141,6 +225,9 @@
 		activeTab = tab;
 		if (tab === 'log') {
 			await loadLogData();
+		}
+		if (tab === 'insights') {
+			insightsMeals = await getMealsForDays(7);
 		}
 	}
 
@@ -629,6 +716,131 @@
 	<button class="fab" onclick={() => switchTab('daily')} aria-label="Quick add food">
 		<span class="material-symbols-outlined">add</span>
 	</button>
+	{/if}
+
+	<!-- INSIGHTS TAB -->
+	{#if activeTab === 'insights'}
+	<main class="main-content">
+		<!-- Header -->
+		<section class="insights-header">
+			<h2 class="text-headline-md">Weekly Insights</h2>
+			<p class="text-body-md" style="color: var(--on-surface-variant);">{insightsData.dateRange}</p>
+		</section>
+
+		<!-- Calorie Chart Card -->
+		<section class="insights-card">
+			<div class="insights-card-top">
+				<div>
+					<h3 class="insights-card-title">CALORIE INTAKE</h3>
+					<p class="insights-card-sub">Avg {insightsData.avgCal.toLocaleString()} kcal / day</p>
+				</div>
+			</div>
+			<div class="bar-chart">
+				<div class="bar-chart-y-axis">
+					<span>{Math.round(insightsData.maxCal).toLocaleString()}</span>
+					<span>{Math.round(insightsData.maxCal / 2).toLocaleString()}</span>
+					<span>0</span>
+				</div>
+				<div class="bar-chart-bars">
+					{#each insightsData.days as day, i}
+						<div class="bar-col">
+							<div class="bar-track">
+								<div
+									class="bar-fill"
+									style="height: {(day.cal / insightsData.maxCal) * 100}%; animation-delay: {i * 80}ms;"
+								></div>
+							</div>
+							<span class="bar-label">{day.label}</span>
+						</div>
+					{/each}
+				</div>
+			</div>
+		</section>
+
+		<!-- Macro Balance Card -->
+		<section class="insights-card macro-donut-card">
+			<h3 class="insights-card-title">MACRO BALANCE</h3>
+			<div class="donut-container">
+				<svg class="donut-svg" viewBox="0 0 120 120">
+					<circle class="donut-track" cx="60" cy="60" r="50"></circle>
+					<!-- Protein arc -->
+					<circle
+						class="donut-segment protein-seg"
+						cx="60" cy="60" r="50"
+						stroke-dasharray="{(insightsData.proteinPct / 100) * 314.16} 314.16"
+						stroke-dashoffset="0"
+					></circle>
+					<!-- Carbs arc -->
+					<circle
+						class="donut-segment carbs-seg"
+						cx="60" cy="60" r="50"
+						stroke-dasharray="{(insightsData.carbsPct / 100) * 314.16} 314.16"
+						stroke-dashoffset="{-((insightsData.proteinPct / 100) * 314.16)}"
+					></circle>
+					<!-- Fat arc -->
+					<circle
+						class="donut-segment fat-seg"
+						cx="60" cy="60" r="50"
+						stroke-dasharray="{(insightsData.fatPct / 100) * 314.16} 314.16"
+						stroke-dashoffset="{-(((insightsData.proteinPct + insightsData.carbsPct) / 100) * 314.16)}"
+					></circle>
+				</svg>
+				<div class="donut-center">
+					<span class="donut-center-label">Target</span>
+					<span class="donut-center-value">{insightsData.targetsHit >= 4 ? 'Met' : 'Missed'}</span>
+				</div>
+			</div>
+			<div class="donut-legend">
+				<div class="donut-legend-item">
+					<div class="donut-dot" style="background: var(--primary); box-shadow: 0 0 8px rgba(208, 188, 255, 0.6);"></div>
+					<span class="donut-legend-pct">{insightsData.proteinPct}%</span>
+					<span class="donut-legend-name">PRO</span>
+				</div>
+				<div class="donut-legend-item">
+					<div class="donut-dot" style="background: var(--secondary); box-shadow: 0 0 8px rgba(78, 222, 163, 0.6);"></div>
+					<span class="donut-legend-pct">{insightsData.carbsPct}%</span>
+					<span class="donut-legend-name">CRB</span>
+				</div>
+				<div class="donut-legend-item">
+					<div class="donut-dot" style="background: var(--tertiary); box-shadow: 0 0 8px rgba(255, 185, 95, 0.6);"></div>
+					<span class="donut-legend-pct">{insightsData.fatPct}%</span>
+					<span class="donut-legend-name">FAT</span>
+				</div>
+			</div>
+		</section>
+
+		<!-- Stats Badges -->
+		<section class="insights-badges">
+			<div class="badge-card">
+				<div class="badge-icon" style="background: color-mix(in srgb, var(--secondary) 20%, transparent); color: var(--secondary);">
+					<span class="material-symbols-outlined">local_fire_department</span>
+				</div>
+				<p class="badge-value">{insightsData.streak}</p>
+				<p class="badge-label">DAY STREAK</p>
+			</div>
+			<div class="badge-card">
+				<div class="badge-icon" style="background: color-mix(in srgb, var(--primary) 20%, transparent); color: var(--primary);">
+					<span class="material-symbols-outlined">task_alt</span>
+				</div>
+				<p class="badge-value">{insightsData.targetsHit}/{insightsData.totalDays}</p>
+				<p class="badge-label">TARGETS HIT</p>
+			</div>
+			<div class="badge-card">
+				<div class="badge-icon" style="background: color-mix(in srgb, var(--tertiary) 20%, transparent); color: var(--tertiary);">
+					<span class="material-symbols-outlined">emoji_events</span>
+				</div>
+				<p class="badge-value">{insightsData.avgProtein}g</p>
+				<p class="badge-label">AVG PROTEIN</p>
+			</div>
+			<div class="badge-card">
+				<div class="badge-icon" style="background: color-mix(in srgb, var(--primary) 20%, transparent); color: var(--primary);">
+					<span class="material-symbols-outlined">restaurant</span>
+				</div>
+				<p class="badge-value badge-value-sm">{insightsData.topFood}</p>
+				<p class="badge-label">TOP FOOD</p>
+			</div>
+		</section>
+	</main>
 	{/if}
 
 	<!-- Bottom Navigation Bar -->
