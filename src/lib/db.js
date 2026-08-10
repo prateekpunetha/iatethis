@@ -121,6 +121,20 @@ export async function deleteMeal(id) {
 	await db.delete('meals', id);
 }
 
+/** Delete a single item from a meal */
+export async function deleteMealItem(mealId, itemIdx) {
+	const db = await getDB();
+	const meal = await db.get('meals', mealId);
+	if (meal) {
+		meal.items.splice(itemIdx, 1);
+		if (meal.items.length === 0) {
+			await db.delete('meals', mealId);
+		} else {
+			await db.put('meals', meal);
+		}
+	}
+}
+
 /** Get all meals for today */
 export async function getTodaysMeals() {
 	const db = await getDB();

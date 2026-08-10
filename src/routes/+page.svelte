@@ -1,7 +1,7 @@
 <script>
 	import { onMount, tick } from 'svelte';
 	import { parseInput, toGrams } from '$lib/parser.js';
-	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal, getAllMeals, getFrequentFoods, searchFoods } from '$lib/db.js';
+	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal, deleteMealItem, getAllMeals, getFrequentFoods, searchFoods } from '$lib/db.js';
 	import { SEED_FOODS } from '$lib/seeds.js';
 
 	let input = $state('');
@@ -292,6 +292,15 @@
 		}
 	}
 
+	async function deleteSingleItem(mealId, itemIdx) {
+		await deleteMealItem(mealId, itemIdx);
+		await loadTodaysMeals();
+		/* Also refresh log data if on log tab */
+		if (activeTab === 'log') {
+			await loadLogData();
+		}
+	}
+
 	async function clearAll() {
 		await clearTodaysMeals();
 		await loadTodaysMeals();
@@ -473,11 +482,9 @@
 											{Math.round(item.cal)} <span class="log-entry-cal-unit">kcal</span>
 										</div>
 									</div>
-									{#if itemIdx === 0}
-										<button class="log-entry-delete" onclick={() => deleteMealEntry(meal.id)} aria-label="Delete meal">
-											<span class="material-symbols-outlined">close</span>
-										</button>
-									{/if}
+									<button class="log-entry-delete" onclick={() => deleteSingleItem(meal.id, itemIdx)} aria-label="Delete item">
+										<span class="material-symbols-outlined">close</span>
+									</button>
 								</div>
 							</div>
 						{/each}
