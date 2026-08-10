@@ -937,25 +937,25 @@
 					></circle>
 				</svg>
 				<div class="donut-center">
-					<span class="donut-center-label">Target</span>
-					<span class="donut-center-value">{insightsData.targetsHit >= 4 ? 'Met' : 'Missed'}</span>
+					<span class="donut-center-label">Weekly kcal</span>
+					<span class="donut-center-value">{(insightsData.avgCal * insightsData.totalDays).toLocaleString()}</span>
 				</div>
 			</div>
 			<div class="donut-legend">
 				<div class="donut-legend-item">
 					<div class="donut-dot" style="background: var(--primary); box-shadow: 0 0 8px rgba(208, 188, 255, 0.6);"></div>
 					<span class="donut-legend-pct">{insightsData.proteinPct}%</span>
-					<span class="donut-legend-name">PRO</span>
+					<span class="donut-legend-name">Protein</span>
 				</div>
 				<div class="donut-legend-item">
 					<div class="donut-dot" style="background: var(--secondary); box-shadow: 0 0 8px rgba(78, 222, 163, 0.6);"></div>
 					<span class="donut-legend-pct">{insightsData.carbsPct}%</span>
-					<span class="donut-legend-name">CRB</span>
+					<span class="donut-legend-name">Carbs</span>
 				</div>
 				<div class="donut-legend-item">
 					<div class="donut-dot" style="background: var(--tertiary); box-shadow: 0 0 8px rgba(255, 185, 95, 0.6);"></div>
 					<span class="donut-legend-pct">{insightsData.fatPct}%</span>
-					<span class="donut-legend-name">FAT</span>
+					<span class="donut-legend-name">Fat</span>
 				</div>
 			</div>
 		</section>
