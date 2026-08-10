@@ -24,6 +24,9 @@
 	let deferredPrompt = null;
 	let showInstallBanner = $state(false);
 
+	/* Drawer state */
+	let isDrawerOpen = $state(false);
+
 	/* Insights tab state */
 	let insightsMeals = $state([]);
 
@@ -576,7 +579,7 @@
 	<!-- Top App Bar -->
 	<header class="header">
 		<div class="header-left">
-			<button class="icon-btn" style="color: var(--on-surface-variant);">
+			<button class="icon-btn" style="color: var(--on-surface-variant);" onclick={() => isDrawerOpen = true}>
 				<span class="material-symbols-outlined">menu</span>
 			</button>
 			<h1>iatethis</h1>
@@ -590,6 +593,42 @@
 			</button>
 		</div>
 	</header>
+
+	<!-- DRAWER MENU -->
+	{#if isDrawerOpen}
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="drawer-overlay" onclick={() => isDrawerOpen = false}></div>
+		<div class="drawer">
+			<div class="drawer-header">
+				<h2 class="drawer-title">iatethis</h2>
+				<button class="icon-btn" onclick={() => isDrawerOpen = false}>
+					<span class="material-symbols-outlined">close</span>
+				</button>
+			</div>
+			
+			<div class="drawer-content">
+				<div class="drawer-section">
+					<p class="drawer-section-title">About</p>
+					<p class="drawer-text">
+						An insanely fast food tracker built with Svelte 5 and IndexedDB. It learns your foods the first time, then works completely offline forever.
+					</p>
+				</div>
+
+				<div class="drawer-section">
+					<p class="drawer-section-title">Links</p>
+					<a href="https://prateekpunetha.dev" class="drawer-link">
+						<span class="material-symbols-outlined">code</span>
+						<span>Developer Info</span>
+					</a>
+					<a href="https://github.com/prateekpunetha/iatethis" target="_blank" class="drawer-link">
+						<span class="material-symbols-outlined">terminal</span>
+						<span>GitHub Repo</span>
+					</a>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<!-- DAILY TAB -->
 	{#if activeTab === 'daily'}
