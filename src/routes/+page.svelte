@@ -103,14 +103,84 @@
 		};
 	});
 
-	/* Macro goals (daily targets) */
-	const goals = {
-		cal: 2800,
-		protein: 150,
-		carbs: 300,
-		fat: 80,
-		fiber: 30
-	};
+	/* Macro goals (daily targets) — loaded from localStorage */
+	const defaultGoals = { cal: 2800, protein: 150, carbs: 300, fat: 80, fiber: 30 };
+	let goals = $state({ ...defaultGoals });
+
+	/* Profile state */
+	let profileName = $state('You');
+	let profileObjective = $state('maintenance'); // 'muscle_gain' | 'fat_loss' | 'maintenance'
+	let profileWeight = $state(70);
+	let profileTargetWeight = $state(70);
+	let profileSaved = $state(false);
+
+	/* Macro slider percentages */
+	let proteinPct = $state(30);
+	let carbsPct = $state(40);
+	let fatPct = $state(30);
+
+	/* Derived gram values from calorie target + percentages */
+	let proteinGrams = $derived(Math.round((goals.cal * (proteinPct / 100)) / 4));
+	let carbsGrams = $derived(Math.round((goals.cal * (carbsPct / 100)) / 4));
+	let fatGrams = $derived(Math.round((goals.cal * (fatPct / 100)) / 9));
+
+	function loadProfile() {
+		try {
+			const saved = localStorage.getItem('iatethis_profile');
+			if (saved) {
+				const p = JSON.parse(saved);
+				goals = { ...defaultGoals, ...p.goals };
+				profileName = p.name || 'You';
+				profileObjective = p.objective || 'maintenance';
+				profileWeight = p.weight || 70;
+				profileTargetWeight = p.targetWeight || 70;
+				proteinPct = p.proteinPct || 30;
+				carbsPct = p.carbsPct || 40;
+				fatPct = p.fatPct || 30;
+			}
+		} catch (e) { /* ignore corrupt data */ }
+	}
+
+	function saveProfile() {
+		/* Recalculate macro gram goals from percentages */
+		goals.protein = proteinGrams;
+		goals.carbs = carbsGrams;
+		goals.fat = fatGrams;
+
+		const profile = {
+			goals: { ...goals },
+			name: profileName,
+			objective: profileObjective,
+			weight: profileWeight,
+			targetWeight: profileTargetWeight,
+			proteinPct,
+			carbsPct,
+			fatPct
+		};
+		localStorage.setItem('iatethis_profile', JSON.stringify(profile));
+		profileSaved = true;
+		setTimeout(() => profileSaved = false, 2000);
+	}
+
+	/* Adjust sliders so they always sum to 100 */
+	function adjustSlider(changed) {
+		if (changed === 'protein') {
+			const remaining = 100 - proteinPct;
+			const oldOther = carbsPct + fatPct || 1;
+			carbsPct = Math.round((carbsPct / oldOther) * remaining);
+			fatPct = 100 - proteinPct - carbsPct;
+		} else if (changed === 'carbs') {
+			const remaining = 100 - carbsPct;
+			const oldOther = proteinPct + fatPct || 1;
+			proteinPct = Math.round((proteinPct / oldOther) * remaining);
+			fatPct = 100 - proteinPct - carbsPct;
+		} else {
+			const remaining = 100 - fatPct;
+			const oldOther = proteinPct + carbsPct || 1;
+			proteinPct = Math.round((proteinPct / oldOther) * remaining);
+			carbsPct = 100 - proteinPct - fatPct;
+		}
+	}
 
 	let items = $derived(meals.flatMap(m => m.items));
 
@@ -200,6 +270,7 @@
 	}
 
 	onMount(async () => {
+		loadProfile();
 		await seedIfEmpty(SEED_FOODS);
 		await loadTodaysMeals();
 		dbCount = (await getAllFoods()).length;
@@ -840,6 +911,143 @@
 				<p class="badge-label">TOP FOOD</p>
 			</div>
 		</section>
+	</main>
+	{/if}
+
+	<!-- PROFILE TAB -->
+	{#if activeTab === 'profile'}
+	<main class="main-content">
+		<!-- Profile Card -->
+		<section class="profile-card">
+			<div class="profile-card-glow"></div>
+			<div class="profile-avatar">
+				<span class="material-symbols-outlined" style="font-size: 48px; color: var(--primary);">person</span>
+			</div>
+			<div class="profile-name-section">
+				<input
+					type="text"
+					class="profile-name-input"
+					bind:value={profileName}
+					placeholder="Your name"
+				/>
+			</div>
+		</section>
+
+		<!-- Daily Target & Macro Sliders -->
+		<section class="profile-macro-card">
+			<div class="profile-macro-header">
+				<div>
+					<h3 class="profile-section-title" style="margin-bottom: 4px;">DAILY TARGET</h3>
+					<p class="profile-macro-sub">Set your daily calorie goal</p>
+				</div>
+				<div class="profile-cal-input-wrap">
+					<input type="number" class="profile-cal-input" bind:value={goals.cal} min="800" max="8000" step="50" />
+					<span class="profile-cal-unit">kcal</span>
+				</div>
+			</div>
+
+			<div class="profile-macro-divider"></div>
+
+			<div class="profile-macro-sliders">
+				<div class="profile-macro-split-header">
+					<span>MACRO SPLIT</span>
+					<span>100%</span>
+				</div>
+
+				<!-- Protein Slider -->
+				<div class="profile-slider-group">
+					<div class="profile-slider-header">
+						<div class="profile-slider-label">
+							<div class="profile-dot" style="background: var(--secondary);"></div>
+							<span>Protein</span>
+						</div>
+						<div class="profile-slider-value">
+							<span class="profile-slider-grams">{proteinGrams}</span>
+							<span class="profile-slider-pct">g ({proteinPct}%)</span>
+						</div>
+					</div>
+					<input type="range" class="profile-range protein-range" min="10" max="60" bind:value={proteinPct} oninput={() => adjustSlider('protein')} />
+				</div>
+
+				<!-- Carbs Slider -->
+				<div class="profile-slider-group">
+					<div class="profile-slider-header">
+						<div class="profile-slider-label">
+							<div class="profile-dot" style="background: var(--tertiary);"></div>
+							<span>Carbs</span>
+						</div>
+						<div class="profile-slider-value">
+							<span class="profile-slider-grams">{carbsGrams}</span>
+							<span class="profile-slider-pct">g ({carbsPct}%)</span>
+						</div>
+					</div>
+					<input type="range" class="profile-range carbs-range" min="10" max="70" bind:value={carbsPct} oninput={() => adjustSlider('carbs')} />
+				</div>
+
+				<!-- Fat Slider -->
+				<div class="profile-slider-group">
+					<div class="profile-slider-header">
+						<div class="profile-slider-label">
+							<div class="profile-dot" style="background: var(--error);"></div>
+							<span>Fat</span>
+						</div>
+						<div class="profile-slider-value">
+							<span class="profile-slider-grams">{fatGrams}</span>
+							<span class="profile-slider-pct">g ({fatPct}%)</span>
+						</div>
+					</div>
+					<input type="range" class="profile-range fat-range" min="10" max="60" bind:value={fatPct} oninput={() => adjustSlider('fat')} />
+				</div>
+			</div>
+
+			<!-- Visual Split Bar -->
+			<div class="profile-split-bar">
+				<div style="width: {proteinPct}%; background: var(--secondary);"></div>
+				<div style="width: {carbsPct}%; background: var(--tertiary);"></div>
+				<div style="width: {fatPct}%; background: var(--error);"></div>
+			</div>
+		</section>
+
+		<!-- Weight Cards -->
+		<section class="profile-weight-grid">
+			<div class="profile-weight-card">
+				<span class="profile-weight-label">CURRENT WEIGHT</span>
+				<div class="profile-weight-value-wrap">
+					<input type="number" class="profile-weight-input" bind:value={profileWeight} min="20" max="300" />
+					<span class="profile-weight-unit">kg</span>
+				</div>
+			</div>
+			<div class="profile-weight-card">
+				<span class="profile-weight-label">TARGET WEIGHT</span>
+				<div class="profile-weight-value-wrap">
+					<input type="number" class="profile-weight-input target" bind:value={profileTargetWeight} min="20" max="300" />
+					<span class="profile-weight-unit">kg</span>
+				</div>
+			</div>
+		</section>
+
+		<!-- Fiber Goal -->
+		<section class="profile-fiber-card">
+			<div class="profile-fiber-left">
+				<span class="material-symbols-outlined" style="color: var(--primary); font-size: 22px;">grass</span>
+				<span class="profile-fiber-label">Fiber Goal</span>
+			</div>
+			<div class="profile-fiber-right">
+				<input type="number" class="profile-fiber-input" bind:value={goals.fiber} min="0" max="100" />
+				<span class="profile-fiber-unit">g/day</span>
+			</div>
+		</section>
+
+		<!-- Save Button -->
+		<button class="profile-save-btn" onclick={saveProfile}>
+			{profileSaved ? '✓  Saved!' : 'Save Goals'}
+		</button>
+
+		<!-- Foods in database count -->
+		<div class="profile-db-count">
+			<span class="material-symbols-outlined" style="font-size: 16px; color: var(--outline);">database</span>
+			<span>{dbCount} foods learned</span>
+		</div>
 	</main>
 	{/if}
 
