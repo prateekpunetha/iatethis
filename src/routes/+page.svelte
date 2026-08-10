@@ -455,7 +455,7 @@
 			<section class="log-card">
 				<h2 class="log-card-title">Today's Log</h2>
 				<div class="log-entries">
-					{#each meals as meal, mealIdx (meal.id)}
+					{#each [...meals].reverse() as meal, mealIdx (meal.id)}
 						{#each meal.items as item, itemIdx}
 							<div class="log-entry" style="animation-delay: {(mealIdx * meal.items.length + itemIdx) * 50}ms">
 								<div class="log-entry-left">
