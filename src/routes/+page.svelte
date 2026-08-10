@@ -18,6 +18,7 @@
 	let recentMeals = $state([]);
 	let frequentFoods = $state([]);
 	let searching = $state(false);
+	let expandedDate = $state(null); // which date card is expanded
 
 	/* Insights tab state */
 	let insightsMeals = $state([]);
@@ -305,6 +306,50 @@
 	async function loadLogData() {
 		recentMeals = await getAllMeals();
 		frequentFoods = await getFrequentFoods(6);
+	}
+
+	let logDays = $derived.by(() => {
+		const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+		const days = [];
+		const now = new Date();
+		for (let i = 6; i >= 0; i--) {
+			const d = new Date(now);
+			d.setDate(d.getDate() - i);
+			const dateStr = d.toISOString().split('T')[0];
+			const dayMeals = recentMeals.filter(m => (m.date || new Date(m.logged_at).toISOString().split('T')[0]) === dateStr);
+			const allItems = dayMeals.flatMap(m => m.items);
+			const totalCal = allItems.reduce((s, item) => s + (item.cal || 0), 0);
+			const totalProtein = allItems.reduce((s, item) => s + (item.protein || 0), 0);
+			const totalCarbs = allItems.reduce((s, item) => s + (item.carbs || 0), 0);
+			const totalFat = allItems.reduce((s, item) => s + (item.fat || 0), 0);
+			
+			const isToday = i === 0;
+			const isYesterday = i === 1;
+			let label = d.toLocaleDateString('en-IN', { weekday: 'long' });
+			if (isToday) label = 'Today';
+			if (isYesterday) label = 'Yesterday';
+			
+			days.push({
+				date: dateStr,
+				dayShort: dayNames[d.getDay()],
+				dayNum: d.getDate(),
+				label,
+				formattedDate: d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }),
+				isToday,
+				isFuture: false,
+				totalCal: Math.round(totalCal),
+				totalProtein: Math.round(totalProtein),
+				totalCarbs: Math.round(totalCarbs),
+				totalFat: Math.round(totalFat),
+				meals: dayMeals,
+				hasData: totalCal > 0
+			});
+		}
+		return days;
+	});
+
+	function toggleDayExpand(dateStr) {
+		expandedDate = expandedDate === dateStr ? null : dateStr;
 	}
 
 	async function handleSearch() {
@@ -664,114 +709,104 @@
 	<!-- LOG TAB -->
 	{#if activeTab === 'log'}
 	<main class="main-content">
-		<!-- Search Bar -->
-		<section class="search-bar">
-			<span class="material-symbols-outlined search-bar-icon">search</span>
-			<input
-				type="text"
-				bind:value={searchQuery}
-				oninput={handleSearch}
-				placeholder="Search for food, macros, or meals..."
-				class="search-bar-input"
-			/>
-			{#if searchQuery}
-				<button class="icon-btn" style="color: var(--on-surface-variant);" onclick={() => { searchQuery = ''; searchResults = []; }}>
-					<span class="material-symbols-outlined" style="font-size: 20px;">close</span>
-				</button>
-			{/if}
+		<!-- Header -->
+		<section class="log-history-header">
+			<h2 class="text-headline-md">Log History</h2>
 		</section>
 
-		<!-- Search Results -->
-		{#if searchQuery && searchResults.length > 0}
-			<section>
-				<h2 class="log-section-title">Results</h2>
-				<div class="log-list-card">
-					{#each searchResults as food, i}
-						<div class="log-list-item" style="animation-delay: {i * 30}ms">
-							<div class="log-list-item-left">
-								<div class="log-list-item-icon" style="color: var(--secondary);">
-									<span class="material-symbols-outlined">{getFoodIcon(food)}</span>
-								</div>
-								<div>
-									<p class="log-list-item-name">{food.name}</p>
-									<p class="log-list-item-sub">per 100g</p>
-								</div>
-							</div>
-							<div class="log-list-item-right">
-								<p class="log-list-item-cal">{Math.round(food.per_100g?.cal || 0)}</p>
-								<p class="log-list-item-cal-unit">kcal</p>
+		<!-- Horizontal Date Picker -->
+		<section class="date-picker-scroll">
+			{#each logDays as day}
+				<button
+					class="date-pill {day.isToday ? 'active' : ''} {!day.hasData && !day.isToday ? 'empty' : ''}"
+					onclick={() => toggleDayExpand(day.date)}
+				>
+					<span class="date-pill-day">{day.dayShort}</span>
+					<span class="date-pill-num">{day.dayNum}</span>
+				</button>
+			{/each}
+		</section>
+
+		<!-- Day Summary Cards -->
+		<section class="day-cards">
+			{#each [...logDays].reverse().filter(d => d.hasData) as day, i (day.date)}
+				<article
+					class="day-card {expandedDate === day.date ? 'expanded' : ''}"
+					onclick={() => toggleDayExpand(day.date)}
+					style="animation-delay: {i * 60}ms;"
+				>
+					<!-- Color indicator -->
+					{#if day.totalCal >= goals.cal}
+						<div class="day-card-indicator" style="background: var(--tertiary);"></div>
+					{:else if day.totalCal >= goals.cal * 0.8}
+						<div class="day-card-indicator" style="background: var(--secondary);"></div>
+					{:else}
+						<div class="day-card-indicator" style="background: var(--outline);"></div>
+					{/if}
+
+					<div class="day-card-top">
+						<div class="day-card-left">
+							<h3 class="day-card-name">{day.label}</h3>
+							<p class="day-card-date">{day.formattedDate}</p>
+						</div>
+						<div class="day-card-right">
+							<span class="day-card-cal">{day.totalCal.toLocaleString()}</span>
+							<span class="day-card-cal-unit">KCAL</span>
+						</div>
+					</div>
+
+					<div class="day-card-macros">
+						<div class="day-card-macro">
+							<span class="day-card-macro-label">PROTEIN</span>
+							<div class="day-card-macro-val">
+								<span>{day.totalProtein}</span>
+								<span class="day-card-macro-unit">g</span>
 							</div>
 						</div>
-					{/each}
-				</div>
-			</section>
-		{:else if searchQuery && searchResults.length === 0 && !searching}
-			<div class="empty-state" style="padding: 2rem 1rem;">
-				<div class="empty-state-icon">
-					<span class="material-symbols-outlined">search_off</span>
-				</div>
-				<div class="empty-state-title">No foods found</div>
-				<div class="empty-state-hint">Try logging it from the Daily tab to learn it</div>
-			</div>
-		{/if}
-
-		<!-- Recent Meals (show when not searching) -->
-		{#if !searchQuery}
-			{#if recentMeals.length > 0}
-				<section>
-					<h2 class="log-section-title">Recent</h2>
-					<div class="log-list-card">
-						{#each recentMeals.slice(0, 8) as meal, i}
-							{#each meal.items as item, j}
-								<div class="log-list-item" style="animation-delay: {(i + j) * 30}ms">
-									<div class="log-list-item-left">
-										<div class="log-list-item-icon" style="color: var(--{['secondary', 'tertiary', 'primary'][(i + j) % 3]});">
-											<span class="material-symbols-outlined">{getFoodIcon(item)}</span>
-										</div>
-										<div>
-											<p class="log-list-item-name">{item.name}</p>
-											<p class="log-list-item-sub">{formatQty(item)} · {formatDate(meal.logged_at)}</p>
-										</div>
-									</div>
-									<div class="log-list-item-right">
-										<p class="log-list-item-cal">{Math.round(item.cal)}</p>
-										<p class="log-list-item-cal-unit">kcal</p>
-									</div>
-								</div>
-							{/each}
-						{/each}
-					</div>
-				</section>
-			{/if}
-
-			<!-- Frequent Foods -->
-			{#if frequentFoods.length > 0}
-				<section>
-					<h2 class="log-section-title">Frequent</h2>
-					<div class="frequent-grid">
-						{#each frequentFoods.slice(0, 4) as food, i}
-							<div class="frequent-card" style="animation-delay: {i * 50}ms">
-								<div class="frequent-card-top">
-									<div class="frequent-card-icon" style="background: color-mix(in srgb, var(--{['primary', 'secondary', 'tertiary', 'primary'][i % 4]}) 20%, transparent); color: var(--{['primary', 'secondary', 'tertiary', 'primary'][i % 4]});">
-										<span class="material-symbols-outlined" style="font-size: 18px;">{getFoodIcon(food)}</span>
-									</div>
-									<span class="frequent-card-badge">{food.times_used}× used</span>
-								</div>
-								<div class="frequent-card-body">
-									<p class="frequent-card-name">{food.name}</p>
-									<p class="frequent-card-cal">
-										{Math.round(food.per_100g?.cal || 0)}
-										<span class="frequent-card-cal-unit">kcal/100g</span>
-									</p>
-								</div>
+						<div class="day-card-macro">
+							<span class="day-card-macro-label">CARBS</span>
+							<div class="day-card-macro-val">
+								<span>{day.totalCarbs}</span>
+								<span class="day-card-macro-unit">g</span>
 							</div>
-						{/each}
+						</div>
+						<div class="day-card-macro">
+							<span class="day-card-macro-label">FAT</span>
+							<div class="day-card-macro-val">
+								<span>{day.totalFat}</span>
+								<span class="day-card-macro-unit">g</span>
+							</div>
+						</div>
 					</div>
-				</section>
-			{/if}
 
-			<!-- Empty log state -->
-			{#if recentMeals.length === 0 && frequentFoods.length === 0}
+					<!-- Expanded food items -->
+					{#if expandedDate === day.date}
+						<div class="day-card-items" role="presentation" onclick={(e) => e.stopPropagation()}>
+							{#each day.meals as meal}
+								{#each meal.items as item, itemIdx}
+									<div class="day-card-item">
+										<div class="day-card-item-left">
+											<span class="material-symbols-outlined" style="font-size: 18px; color: var(--outline);">{getFoodIcon(item)}</span>
+											<div>
+												<p class="day-card-item-name">{item.name}</p>
+												<p class="day-card-item-qty">{formatQty(item)}</p>
+											</div>
+										</div>
+										<div class="day-card-item-right">
+											<span class="day-card-item-cal">{Math.round(item.cal)} kcal</span>
+											<button class="log-entry-delete" onclick={() => deleteSingleItem(meal.id, itemIdx)} aria-label="Delete item">
+												<span class="material-symbols-outlined">close</span>
+											</button>
+										</div>
+									</div>
+								{/each}
+							{/each}
+						</div>
+					{/if}
+				</article>
+			{/each}
+
+			{#if logDays.every(d => !d.hasData)}
 				<div class="empty-state">
 					<div class="empty-state-icon">
 						<span class="material-symbols-outlined">history</span>
@@ -780,7 +815,7 @@
 					<div class="empty-state-hint">Your food history will appear here</div>
 				</div>
 			{/if}
-		{/if}
+		</section>
 	</main>
 
 	<!-- FAB for quick add -->

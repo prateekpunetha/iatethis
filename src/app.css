@@ -1131,6 +1131,287 @@ body {
 	font-size: 26px;
 }
 
+/* LOG TAB: HISTORY REDESIGN */
+
+.log-history-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-end;
+}
+
+.date-picker-scroll {
+	display: flex;
+	gap: 8px;
+	overflow-x: auto;
+	padding-bottom: 8px;
+	scroll-snap-type: x mandatory;
+	-ms-overflow-style: none;
+	scrollbar-width: none;
+}
+
+.date-picker-scroll::-webkit-scrollbar {
+	display: none;
+}
+
+.date-pill {
+	flex-shrink: 0;
+	width: 56px;
+	height: 76px;
+	border-radius: var(--radius-xl);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	background: var(--surface-container);
+	border: 1px solid var(--outline-variant);
+	cursor: pointer;
+	transition: all var(--transition);
+	scroll-snap-align: center;
+}
+
+.date-pill:hover {
+	border-color: var(--primary);
+}
+
+.date-pill.active {
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+	border-color: rgba(208, 188, 255, 0.3);
+	box-shadow: 0 0 15px rgba(160, 120, 255, 0.2);
+}
+
+.date-pill.empty {
+	opacity: 0.4;
+}
+
+.date-pill-day {
+	font-size: 12px;
+	letter-spacing: 0.05em;
+	font-weight: 600;
+	text-transform: uppercase;
+	color: var(--on-surface-variant);
+}
+
+.date-pill.active .date-pill-day {
+	color: var(--on-primary-container);
+}
+
+.date-pill-num {
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--on-surface);
+}
+
+.date-pill.active .date-pill-num {
+	color: var(--on-primary-container);
+	font-weight: 700;
+}
+
+/* Day Summary Cards */
+
+.day-cards {
+	display: flex;
+	flex-direction: column;
+	gap: var(--stack-gap);
+}
+
+.day-card {
+	background: var(--surface-container);
+	border-radius: var(--radius-xl);
+	padding: var(--card-padding);
+	border: 1px solid rgba(255, 255, 255, 0.05);
+	position: relative;
+	overflow: hidden;
+	cursor: pointer;
+	transition: transform var(--transition), box-shadow var(--transition);
+	animation: entry-fade 0.3s ease both;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.day-card:active {
+	transform: scale(0.98);
+}
+
+.day-card.expanded {
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.day-card-indicator {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 4px;
+}
+
+.day-card-top {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+}
+
+.day-card-name {
+	font-size: 16px;
+	line-height: 24px;
+	font-weight: 600;
+	color: var(--on-surface);
+}
+
+.day-card-date {
+	font-size: 12px;
+	letter-spacing: 0.05em;
+	font-weight: 500;
+	color: var(--on-surface-variant);
+	text-transform: uppercase;
+	margin-top: 2px;
+}
+
+.day-card-right {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+}
+
+.day-card-cal {
+	font-size: 32px;
+	line-height: 40px;
+	letter-spacing: -0.01em;
+	font-weight: 700;
+	color: var(--primary);
+}
+
+.day-card-cal-unit {
+	font-size: 12px;
+	letter-spacing: 0.05em;
+	font-weight: 600;
+	color: var(--on-surface-variant);
+	text-transform: uppercase;
+}
+
+.day-card-macros {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	gap: 8px;
+	padding-top: 12px;
+	border-top: 1px solid rgba(255, 255, 255, 0.07);
+	margin-top: 4px;
+}
+
+.day-card-macro-label {
+	font-size: 12px;
+	letter-spacing: 0.05em;
+	font-weight: 600;
+	text-transform: uppercase;
+	color: var(--on-surface-variant);
+}
+
+.day-card-macro-val {
+	display: flex;
+	align-items: baseline;
+	gap: 2px;
+	margin-top: 4px;
+}
+
+.day-card-macro-val > span:first-child {
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--on-surface);
+}
+
+.day-card-macro-unit {
+	font-size: 10px;
+	font-weight: 500;
+	color: var(--on-surface-variant);
+}
+
+/* Expanded food items */
+
+.day-card-items {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	margin-top: 8px;
+	padding-top: 12px;
+	border-top: 1px solid rgba(255, 255, 255, 0.07);
+	animation: entry-fade 0.2s ease both;
+}
+
+.day-card-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.625rem 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.day-card-item:last-child {
+	border-bottom: none;
+	padding-bottom: 0;
+}
+
+.day-card-item-left {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	min-width: 0;
+}
+
+.day-card-item-name {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--on-surface);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.day-card-item-qty {
+	font-size: 11px;
+	color: var(--outline);
+	margin-top: 1px;
+}
+
+.day-card-item-right {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex-shrink: 0;
+}
+
+.day-card-item-cal {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--on-surface-variant);
+}
+
+/* Light theme overrides for log history */
+:root[data-theme="light"] .day-card {
+	border-color: rgba(0, 0, 0, 0.06);
+}
+
+:root[data-theme="light"] .day-card.expanded {
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .day-card-macros {
+	border-top-color: rgba(0, 0, 0, 0.06);
+}
+
+:root[data-theme="light"] .day-card-items {
+	border-top-color: rgba(0, 0, 0, 0.06);
+}
+
+:root[data-theme="light"] .day-card-item {
+	border-bottom-color: rgba(0, 0, 0, 0.04);
+}
+
+:root[data-theme="light"] .date-pill {
+	border-color: rgba(0, 0, 0, 0.08);
+}
+
 /* INSIGHTS TAB */
 
 .insights-header {
@@ -2018,9 +2299,11 @@ body,
 .frequent-card,
 .insights-card,
 .profile-card,
-.profile-macro-card,
-.objective-btn,
-.profile-weight-card,
-.profile-fiber-card {
+	.profile-macro-card,
+	.objective-btn,
+	.profile-weight-card,
+	.profile-fiber-card,
+	.day-card,
+	.date-pill {
 	transition: background var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
