@@ -234,14 +234,6 @@
 		return ringCircumference - (progress * ringCircumference);
 	});
 
-	let today = $derived(
-		new Date().toLocaleDateString('en-IN', {
-			weekday: 'short',
-			day: 'numeric',
-			month: 'short'
-		})
-	);
-
 	/* Meal icons to cycle through */
 	const mealIcons = ['local_cafe', 'breakfast_dining', 'lunch_dining', 'dinner_dining', 'restaurant', 'bakery_dining'];
 	const mealColors = ['primary', 'secondary', 'tertiary', 'primary', 'secondary', 'tertiary'];
@@ -597,7 +589,6 @@
 			<h1>iatethis</h1>
 		</div>
 		<div class="header-right">
-			<span class="header-date">{today}</span>
 			<button class="icon-btn" style="color: var(--tertiary);" onclick={toggleTheme} aria-label="Toggle theme">
 				<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">
 					{theme === 'dark' ? 'wb_sunny' : 'dark_mode'}
