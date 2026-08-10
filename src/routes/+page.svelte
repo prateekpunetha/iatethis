@@ -114,6 +114,7 @@
 	let profileWeight = $state(70);
 	let profileTargetWeight = $state(70);
 	let profileSaved = $state(false);
+	let profilePicture = $state(null);
 
 	/* Macro slider percentages */
 	let proteinPct = $state(30);
@@ -138,6 +139,7 @@
 				proteinPct = p.proteinPct || 30;
 				carbsPct = p.carbsPct || 40;
 				fatPct = p.fatPct || 30;
+				profilePicture = p.profilePicture || null;
 			}
 		} catch (e) { /* ignore corrupt data */ }
 	}
@@ -154,6 +156,7 @@
 			objective: profileObjective,
 			weight: profileWeight,
 			targetWeight: profileTargetWeight,
+			profilePicture,
 			proteinPct,
 			carbsPct,
 			fatPct
@@ -161,6 +164,16 @@
 		localStorage.setItem('iatethis_profile', JSON.stringify(profile));
 		profileSaved = true;
 		setTimeout(() => profileSaved = false, 2000);
+	}
+
+	function handleProfileUpload(e) {
+		const file = e.target.files[0];
+		if (!file) return;
+		const reader = new FileReader();
+		reader.onload = (event) => {
+			profilePicture = event.target.result;
+		};
+		reader.readAsDataURL(file);
 	}
 
 	/* Adjust sliders so they always sum to 100 */
@@ -955,9 +968,18 @@
 		<!-- Profile Card -->
 		<section class="profile-card">
 			<div class="profile-card-glow"></div>
-			<div class="profile-avatar">
-				<span class="material-symbols-outlined" style="font-size: 48px; color: var(--primary);">person</span>
-			</div>
+			<label class="profile-avatar" style="cursor: pointer; overflow: hidden; position: relative;">
+				<input type="file" accept="image/*" style="display: none;" onchange={handleProfileUpload} />
+				{#if profilePicture}
+					<img src={profilePicture} alt="Profile" style="width: 100%; height: 100%; object-fit: cover;" />
+				{:else}
+					<span class="material-symbols-outlined" style="font-size: 48px; color: var(--primary);">person</span>
+				{/if}
+				<!-- Overlay edit icon -->
+				<div style="position: absolute; bottom: 0; background: rgba(0,0,0,0.5); width: 100%; height: 24px; display: flex; justify-content: center; align-items: center;">
+					<span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
+				</div>
+			</label>
 			<div class="profile-name-section">
 				<input
 					type="text"
