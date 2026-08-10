@@ -179,6 +179,7 @@
 		const reader = new FileReader();
 		reader.onload = (event) => {
 			profilePicture = event.target.result;
+			saveProfile();
 		};
 		reader.readAsDataURL(file);
 	}
