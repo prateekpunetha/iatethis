@@ -396,6 +396,13 @@
 
 	function toggleDayExpand(dateStr) {
 		expandedDate = expandedDate === dateStr ? null : dateStr;
+		/* Scroll the matching day card into view after a tick so the DOM updates first */
+		if (expandedDate) {
+			requestAnimationFrame(() => {
+				const card = document.querySelector(`.day-card[data-date="${dateStr}"]`);
+				if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			});
+		}
 	}
 
 	async function handleSearch() {
@@ -820,6 +827,7 @@
 				<article
 					class="day-card {expandedDate === day.date ? 'expanded' : ''}"
 					onclick={() => toggleDayExpand(day.date)}
+					data-date={day.date}
 					style="animation-delay: {i * 60}ms;"
 				>
 					<!-- Color indicator -->
