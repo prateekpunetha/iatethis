@@ -37,6 +37,8 @@
 
 	/* Insights tab state */
 	let insightsMeals = $state([]);
+	/** @type {any[]} full meal history, for true streak counting */
+	let allMeals = $state([]);
 
 	let insightsData = $derived.by(() => {
 		const now = new Date();
@@ -82,11 +84,20 @@
 		// Days where calorie goal was met
 		const targetsHit = daysWithData.filter(d => d.cal >= goals.cal * 0.8).length;
 		
-		// Streak (consecutive days with data from today backwards)
+		// Streak — consecutive days with logged food, counted from the FULL history
+		// (not just the 7-day window). If today isn't logged yet, the streak is
+		// anchored on yesterday so it doesn't zero out during the day.
+		const loggedDates = new Set(
+			allMeals
+				.filter(m => m.items.some(/** @param {any} it */ (it) => (it.cal || 0) > 0))
+				.map(m => m.date || getLocalDateStr(new Date(m.logged_at)))
+		);
+		const anchor = new Date();
+		if (!loggedDates.has(getLocalDateStr(anchor))) anchor.setDate(anchor.getDate() - 1);
 		let streak = 0;
-		for (let i = days.length - 1; i >= 0; i--) {
-			if (days[i].cal > 0) streak++;
-			else break;
+		while (loggedDates.has(getLocalDateStr(anchor))) {
+			streak++;
+			anchor.setDate(anchor.getDate() - 1);
 		}
 		
 		// Top food
@@ -349,6 +360,7 @@
 		}
 		if (tab === 'insights') {
 			insightsMeals = await getMealsForDays(7);
+		allMeals = await getAllMeals();
 		}
 	}
 
