@@ -26,7 +26,8 @@
 	let recentMeals = $state([]);
 	let frequentFoods = $state([]);
 	let searching = $state(false);
-	let expandedDate = $state(null); // which date card is expanded
+	/** @type {string | null} which date card is expanded */
+	let expandedDate = $state(null);
 
 	/* PWA Install state */
 	let deferredPrompt = null;
@@ -419,6 +420,70 @@
 			});
 		}
 	}
+
+	/* ---- Month calendar view ---- */
+	let calendarView = $state(false); // false = week strip, true = month grid
+	let calMonth = $state(new Date()); // any date inside the displayed month
+
+	let monthDayMap = $derived.by(() => {
+		/** @type {Record<string, any>} */
+		const map = {};
+		for (const meal of recentMeals) {
+			const date = meal.date || getLocalDateStr(new Date(meal.logged_at));
+			if (!map[date]) map[date] = { cal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+			for (const item of meal.items) {
+				map[date].cal += item.cal || 0;
+				map[date].protein += item.protein || 0;
+				map[date].carbs += item.carbs || 0;
+				map[date].fat += item.fat || 0;
+				map[date].fiber += item.fiber || 0;
+			}
+		}
+		return map;
+	});
+
+	let monthLabel = $derived(calMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }));
+
+	let calendarCells = $derived.by(() => {
+		const y = calMonth.getFullYear();
+		const mo = calMonth.getMonth();
+		const startBlanks = new Date(y, mo, 1).getDay();
+		const numDays = new Date(y, mo + 1, 0).getDate();
+		const todayStr = getLocalDateStr();
+		const cells = [];
+		for (let i = 0; i < startBlanks; i++) cells.push(null);
+		for (let d = 1; d <= numDays; d++) {
+			const dateStr = getLocalDateStr(new Date(y, mo, d));
+			cells.push({ dateStr, dayNum: d, totals: monthDayMap[dateStr] || null, isToday: dateStr === todayStr });
+		}
+		return cells;
+	});
+
+	let selectedDayMeals = $derived(
+		expandedDate ? recentMeals.filter(m => (m.date || getLocalDateStr(new Date(m.logged_at))) === expandedDate) : []
+	);
+
+	function selectedDayLabel() {
+		if (!expandedDate) return '';
+		const now = new Date();
+		if (expandedDate === getLocalDateStr(now)) return 'Today';
+		const yest = new Date(now); yest.setDate(yest.getDate() - 1);
+		if (expandedDate === getLocalDateStr(yest)) return 'Yesterday';
+		return new Date(expandedDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+	}
+
+	function calTier(/** @type {string} */ dateStr) {
+		const d = monthDayMap[dateStr];
+		if (!d || d.cal <= 0) return '';
+		const r = d.cal / goals.cal;
+		if (r >= 1) return 'over';
+		if (r >= 0.8) return 'near';
+		return 'ok';
+	}
+
+	function prevMonth() { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); }
+	function nextMonth() { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); }
+	function goToday() { calMonth = new Date(); expandedDate = getLocalDateStr(); }
 
 	async function handleSearch() {
 		const q = searchQuery.trim();
@@ -832,9 +897,14 @@
 		<!-- Header -->
 		<section class="log-history-header">
 			<h2 class="text-headline-md">Log History</h2>
+			<div class="view-toggle" role="tablist" aria-label="History view">
+				<button class:on={!calendarView} onclick={() => calendarView = false} role="tab" aria-selected={!calendarView}>Week</button>
+				<button class:on={calendarView} onclick={() => calendarView = true} role="tab" aria-selected={calendarView}>Month</button>
+			</div>
 		</section>
 
-		<!-- Horizontal Date Picker -->
+		{#if !calendarView}
+	<!-- Horizontal Date Picker -->
 		<section class="date-picker-scroll">
 			{#each logDays as day}
 				<button
@@ -937,6 +1007,85 @@
 				</div>
 			{/if}
 		</section>
+		{:else}
+		<!-- Month Calendar -->
+		<section class="cal-header">
+			<button class="icon-btn" onclick={prevMonth} aria-label="Previous month">
+				<span class="material-symbols-outlined">chevron_left</span>
+			</button>
+			<button class="cal-month-label" onclick={goToday} title="Jump to today">{monthLabel}</button>
+			<button class="icon-btn" onclick={nextMonth} aria-label="Next month">
+				<span class="material-symbols-outlined">chevron_right</span>
+			</button>
+		</section>
+
+		<section class="cal-grid" aria-label="{monthLabel} calendar">
+			{#each ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as wd}
+				<span class="cal-weekday" aria-hidden="true">{wd}</span>
+			{/each}
+			{#each calendarCells as cell}
+				{#if cell === null}
+					<span class="cal-cell cal-blank" aria-hidden="true"></span>
+				{:else}
+					<button
+						class="cal-cell {calTier(cell.dateStr)} {cell.isToday ? 'today' : ''} {expandedDate === cell.dateStr ? 'selected' : ''}"
+						onclick={() => expandedDate = expandedDate === cell.dateStr ? null : cell.dateStr}
+						aria-label="{cell.dayNum} {monthLabel}{cell.totals ? ', ' + Math.round(cell.totals.cal) + ' kcal' : ''}"
+					>
+						<span class="cal-cell-num">{cell.dayNum}</span>
+						{#if cell.totals && cell.totals.cal > 0}
+							<span class="cal-cell-cal">{Math.round(cell.totals.cal)}</span>
+						{/if}
+					</button>
+				{/if}
+			{/each}
+		</section>
+
+		<!-- Selected day detail -->
+		{#if expandedDate && selectedDayMeals.length > 0}
+			{@const dayTotals = monthDayMap[expandedDate]}
+			<section class="cal-detail">
+				<div class="cal-detail-head">
+					<div>
+						<h3 class="cal-detail-title">{selectedDayLabel()}</h3>
+						<p class="cal-detail-sub">{selectedDayMeals.reduce((s, m) => s + m.items.length, 0)} items</p>
+					</div>
+					<div class="cal-detail-cal">
+						<span class="cal-detail-num">{Math.round(dayTotals.cal).toLocaleString()}</span>
+						<span class="cal-detail-unit">kcal</span>
+					</div>
+				</div>
+				<div class="day-card-items" role="presentation">
+					{#each selectedDayMeals as meal}
+						{#each meal.items as item, itemIdx}
+							<div class="day-card-item {removingItems.has(`${meal.id}:${itemIdx}`) ? 'removing' : ''}">
+								<div class="day-card-item-left">
+									<span class="material-symbols-outlined" style="font-size: 18px; color: var(--outline);">{getFoodIcon(item)}</span>
+									<div>
+										<p class="day-card-item-name">{item.name}</p>
+										<p class="day-card-item-qty">{formatQty(item)}</p>
+									</div>
+								</div>
+								<div class="day-card-item-right">
+									<span class="day-card-item-cal">{Math.round(item.cal)} kcal</span>
+									<button class="log-entry-delete" onclick={() => deleteSingleItem(meal.id, itemIdx)} aria-label="Delete item">
+										<span class="material-symbols-outlined">close</span>
+									</button>
+								</div>
+							</div>
+						{/each}
+					{/each}
+				</div>
+			</section>
+		{:else if expandedDate}
+			<section class="empty-state">
+				<div class="empty-state-icon">
+					<span class="material-symbols-outlined">restaurant</span>
+				</div>
+				<div class="empty-state-title">Nothing logged this day</div>
+			</section>
+		{/if}
+		{/if}
 	</main>
 
 	<!-- FAB for quick add -->
