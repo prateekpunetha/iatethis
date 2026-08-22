@@ -1,5 +1,7 @@
 <script>
 	import { onMount, tick } from 'svelte';
+	import { fade, fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import { parseInput, toGrams } from '$lib/parser.js';
 	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal, deleteMealItem, getAllMeals, getFrequentFoods, searchFoods, getMealsForDays } from '$lib/db.js';
 	import { SEED_FOODS } from '$lib/seeds.js';
@@ -14,6 +16,7 @@
 	let status = $state(null); // { type: 'loading'|'error'|'success', message: '' }
 	let dbCount = $state(0);
 	let loading = $state(false);
+	let removingItems = $state(new Set());
 	let theme = $state('dark');
 	let activeTab = $state('daily');
 
@@ -555,6 +558,13 @@
 	}
 
 	async function deleteSingleItem(mealId, itemIdx) {
+		const key = `${mealId}:${itemIdx}`;
+		if (removingItems.has(key)) return;
+		removingItems = new Set([...removingItems, key]);
+		// let the exit transition play before the row leaves the DOM
+		await new Promise((r) => setTimeout(r, 200));
+		removingItems.delete(key);
+		removingItems = new Set(removingItems);
 		await deleteMealItem(mealId, itemIdx);
 		await loadTodaysMeals();
 		/* Also refresh log data if on log tab */
@@ -608,8 +618,8 @@
 	{#if isDrawerOpen}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="drawer-overlay" onclick={() => isDrawerOpen = false}></div>
-		<div class="drawer">
+		<div class="drawer-overlay" transition:fade={{ duration: 200 }} onclick={() => isDrawerOpen = false}></div>
+		<div class="drawer" transition:fly={{ x: -320, duration: 300, easing: cubicOut }}>
 			<div class="drawer-header">
 				<h2 class="drawer-title">iatethis</h2>
 				<button class="icon-btn" onclick={() => isDrawerOpen = false} aria-label="Close sidebar menu">
@@ -750,8 +760,12 @@
 					aria-label="What did you eat?"
 					disabled={loading}
 				/>
-				<button class="send-btn" onclick={handleSubmit} disabled={loading || !input.trim()}>
-					<span class="material-symbols-outlined">send</span>
+				<button class="send-btn" onclick={handleSubmit} disabled={loading || !input.trim()} aria-label={loading ? 'Analyzing' : 'Log food'}>
+					{#if loading}
+						<span class="material-symbols-outlined send-spinner">progress_activity</span>
+					{:else}
+						<span class="material-symbols-outlined">send</span>
+					{/if}
 				</button>
 			</div>
 		</section>
@@ -763,7 +777,7 @@
 				<div class="log-entries">
 					{#each [...meals].reverse() as meal, mealIdx (meal.id)}
 						{#each meal.items as item, itemIdx}
-							<div class="log-entry" style="animation-delay: {(mealIdx * meal.items.length + itemIdx) * 50}ms">
+							<div class="log-entry {removingItems.has(`${meal.id}:${itemIdx}`) ? 'removing' : ''}" style="animation-delay: {(mealIdx * meal.items.length + itemIdx) * 50}ms">
 								<div class="log-entry-left">
 									<div class="log-entry-icon" style="color: var(--{mealColors[(mealIdx + itemIdx) % mealColors.length]});">
 										<span class="material-symbols-outlined">{getFoodIcon(item)}</span>
@@ -875,11 +889,11 @@
 					</div>
 
 					<!-- Expanded food items -->
-					{#if expandedDate === day.date}
+					<div class="day-card-items-wrap" class:open={expandedDate === day.date}>
 						<div class="day-card-items" role="presentation" onclick={(e) => e.stopPropagation()}>
 							{#each day.meals as meal}
 								{#each meal.items as item, itemIdx}
-									<div class="day-card-item">
+									<div class="day-card-item {removingItems.has(`${meal.id}:${itemIdx}`) ? 'removing' : ''}">
 										<div class="day-card-item-left">
 											<span class="material-symbols-outlined" style="font-size: 18px; color: var(--outline);">{getFoodIcon(item)}</span>
 											<div>
@@ -897,7 +911,7 @@
 								{/each}
 							{/each}
 						</div>
-					{/if}
+					</div>
 				</article>
 			{/each}
 

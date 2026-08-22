@@ -311,6 +311,9 @@ body {
 	flex-direction: column;
 	gap: var(--section-margin);
 	padding-bottom: 2rem;
+	/* Tab-switch bridge: content remounts via {#if activeTab} — a quick fade+rise
+	   prevents the teleport without making navigation feel slow */
+	animation: entry-fade 0.25s cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* PROGRESS RING */
@@ -607,6 +610,14 @@ body {
 	font-variation-settings: 'FILL' 1;
 }
 
+.send-btn .send-spinner {
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	to { transform: rotate(360deg); }
+}
+
 /* STATUS */
 
 .status-bar {
@@ -616,6 +627,14 @@ body {
 	padding: 0.5rem 1rem;
 	border-radius: var(--radius-sm);
 	font-weight: 500;
+	transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+@starting-style {
+	.status-bar {
+		opacity: 0;
+		transform: translateY(4px);
+	}
 }
 
 .status-bar.loading {
@@ -674,6 +693,21 @@ body {
 .log-entry:last-child {
 	padding-bottom: 0;
 	border-bottom: none;
+}
+
+/* Delete exit: fade + slide out before removal from state */
+.log-entry {
+	transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+.log-entry.removing,
+.day-card-item.removing {
+	opacity: 0;
+	transform: translateX(12px);
+}
+
+.day-card-item {
+	transition: opacity 200ms ease-out, transform 200ms ease-out;
 }
 
 .log-entry-left {
@@ -1333,7 +1367,34 @@ body {
 	color: var(--on-surface-variant);
 }
 
-/* Expanded food items */
+/* Expanded food items — grid-rows collapse so expanding AND collapsing animate.
+   Wrapper stays mounted; 1fr row reveals, 0fr collapses. */
+.day-card-items-wrap {
+	display: grid;
+	grid-template-rows: 0fr;
+	transition: grid-template-rows 250ms var(--transition);
+	margin-top: 0;
+}
+
+.day-card-items-wrap.open {
+	grid-template-rows: 1fr;
+	margin-top: 8px;
+}
+
+.day-card-items-wrap > .day-card-items {
+	overflow: hidden;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	padding-top: 0;
+	border-top: none;
+}
+
+.day-card-items-wrap.open > .day-card-items {
+	padding-top: 12px;
+	border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
 
 .day-card-items {
 	display: flex;
@@ -1342,7 +1403,6 @@ body {
 	margin-top: 8px;
 	padding-top: 12px;
 	border-top: 1px solid rgba(255, 255, 255, 0.07);
-	animation: entry-fade 0.2s ease both;
 }
 
 .day-card-item {
@@ -2301,7 +2361,6 @@ body {
 	backdrop-filter: blur(4px);
 	-webkit-backdrop-filter: blur(4px);
 	z-index: 200;
-	animation: fade-in 0.3s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2327,7 +2386,6 @@ body {
 	box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
 	display: flex;
 	flex-direction: column;
-	animation: slide-right 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 	border-right: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -2396,16 +2454,6 @@ body {
 
 .drawer-link:active {
 	transform: scale(0.98);
-}
-
-@keyframes slide-right {
-	from { transform: translateX(-100%); }
-	to { transform: translateX(0); }
-}
-
-@keyframes fade-in {
-	from { opacity: 0; }
-	to { opacity: 1; }
 }
 
 :root[data-theme="light"] .drawer {
