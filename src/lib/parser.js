@@ -4,9 +4,11 @@
  * Handles inputs like:
  *   "200g chicken breast, 2 roti, 150g rice"
  *   "3 eggs and a banana"
+ *   "two eggs, 1 bowl of dal"
  *   "chicken 200g, dal 1 bowl"
  */
 
+/** @type {Record<string, string>} */
 const UNIT_MAP = {
 	'g': 'g',
 	'gm': 'g',
@@ -43,7 +45,25 @@ const UNIT_MAP = {
 	'spoons': 'spoon',
 };
 
+/** @type {Record<string, number>} */
+const WORD_TO_NUM = {
+	half: 0.5,
+	a: 1,
+	an: 1,
+	one: 1,
+	two: 2,
+	three: 3,
+	four: 4,
+	five: 5,
+	six: 6,
+	seven: 7,
+	eight: 8,
+	nine: 9,
+	ten: 10,
+};
+
 /* rough gram equivalents for non-gram units */
+/** @type {Record<string, number>} */
 const UNIT_TO_GRAMS = {
 	'cup': 200,
 	'tbsp': 15,
@@ -61,6 +81,7 @@ const UNIT_TO_GRAMS = {
 export const AMBIGUOUS_UNITS = new Set(['bowl', 'spoon', 'glass', 'plate']);
 
 /** Gram mappings for small/medium/large vessels */
+/** @type {Record<string, Record<string, number>>} */
 export const VESSEL_SIZES = {
   bowl:   { small: 100, medium: 200, large: 350 },
   spoon:  { small: 5,   medium: 15,  large: 30 },
@@ -69,6 +90,7 @@ export const VESSEL_SIZES = {
 };
 
 /** Vessel display icons (Material Symbols) */
+/** @type {Record<string, string>} */
 export const VESSEL_ICONS = {
   bowl:  'soup_kitchen',
   spoon: 'flatware',
@@ -76,9 +98,22 @@ export const VESSEL_ICONS = {
   plate: 'dining',
 };
 
-/** Check if a parsed item uses an ambiguous vessel unit */
+/**
+ * Check if a parsed item uses an ambiguous vessel unit
+ * @param {{ unit?: string }} item
+ */
 export function hasAmbiguousUnit(item) {
-  return AMBIGUOUS_UNITS.has(item.unit);
+  return item?.unit ? AMBIGUOUS_UNITS.has(item.unit) : false;
+}
+
+const UNIT_REGEX_STR = 'g|gm|gms|gram|grams|kg|ml|cup|cups|tbsp|tablespoons?|tsp|teaspoons?|pieces?|pcs?|pc|slices?|bowls?|katori|plates?|glass|glasses|scoops?|handful|spoons?';
+
+/**
+ * Strip leading "of " from food names (e.g. "of rice" -> "rice")
+ * @param {string} n
+ */
+function cleanName(n) {
+	return (n || '').replace(/^of\s+/i, '').trim();
 }
 
 /**
@@ -97,71 +132,94 @@ export function parseInput(input) {
 	return parts.map(part => parseSingleItem(part));
 }
 
+/**
+ * @param {string} raw
+ */
 function parseSingleItem(raw) {
 	raw = raw.trim();
 	let name = raw;
 	let qty = 1;
 	let unit = 'piece';
 
-	/* pattern: "200g chicken breast" or "200 g chicken breast" */
-	const prePattern = /^(\d+\.?\d*)\s*(g|gm|gms|gram|grams|kg|ml|cup|cups|tbsp|tablespoons?|tsp|teaspoons?|pieces?|pcs?|pc|slices?|bowls?|katori|plates?|glass|glasses|scoops?|handful|spoons?)\s+(.+)$/i;
+	/* 1. pattern: "200g chicken breast" or "1 bowl of rice" */
+	const prePattern = new RegExp(`^(\\d+\\.?\\d*)\\s*(${UNIT_REGEX_STR})\\s+(.+)$`, 'i');
 	let m = raw.match(prePattern);
 	if (m) {
 		qty = parseFloat(m[1]);
 		unit = UNIT_MAP[m[2].toLowerCase()] || m[2].toLowerCase();
-		name = m[3].trim();
+		name = cleanName(m[3]);
 		return { raw, name, qty, unit };
 	}
 
-	/* pattern: "chicken breast 200g" or "chicken 200 grams" */
-	const postPattern = /^(.+?)\s+(\d+\.?\d*)\s*(g|gm|gms|gram|grams|kg|ml|cup|cups|tbsp|tablespoons?|tsp|teaspoons?|pieces?|pcs?|pc|slices?|bowls?|katori|plates?|glass|glasses|scoops?|handful|spoons?)$/i;
+	/* 2. pattern: "chicken breast 200g" */
+	const postPattern = new RegExp(`^(.+?)\\s+(\\d+\\.?\\d*)\\s*(${UNIT_REGEX_STR})$`, 'i');
 	m = raw.match(postPattern);
 	if (m) {
-		name = m[1].trim();
+		name = cleanName(m[1]);
 		qty = parseFloat(m[2]);
 		unit = UNIT_MAP[m[3].toLowerCase()] || m[3].toLowerCase();
 		return { raw, name, qty, unit };
 	}
 
-	/* pattern: "2 roti" or "3 eggs" (number + food name, no unit) */
+	/* 3. pattern: "one bowl of rice" or "two scoops of whey" */
+	const wordUnitPattern = new RegExp(`^(a|an|half|one|two|three|four|five|six|seven|eight|nine|ten)\\s+(${UNIT_REGEX_STR})\\s+(.+)$`, 'i');
+	m = raw.match(wordUnitPattern);
+	if (m) {
+		qty = WORD_TO_NUM[m[1].toLowerCase()] || 1;
+		unit = UNIT_MAP[m[2].toLowerCase()] || m[2].toLowerCase();
+		name = cleanName(m[3]);
+		return { raw, name, qty, unit };
+	}
+
+	/* 4. pattern: "bowl of rice" or "glass of milk" (no number, just unit + food) */
+	const unitOnlyPattern = new RegExp(`^(${UNIT_REGEX_STR})\\s+(.+)$`, 'i');
+	m = raw.match(unitOnlyPattern);
+	if (m) {
+		qty = 1;
+		unit = UNIT_MAP[m[1].toLowerCase()] || m[1].toLowerCase();
+		name = cleanName(m[2]);
+		return { raw, name, qty, unit };
+	}
+
+	/* 5. pattern: "two eggs" or "three rotis" (word number + food name) */
+	const wordCountPattern = /^(half|one|two|three|four|five|six|seven|eight|nine|ten)\s+(.+)$/i;
+	m = raw.match(wordCountPattern);
+	if (m) {
+		qty = WORD_TO_NUM[m[1].toLowerCase()] || 1;
+		name = cleanName(m[2]);
+		unit = 'piece';
+		return { raw, name, qty, unit };
+	}
+
+	/* 6. pattern: "2 roti" or "3 eggs" (number + food name, no unit) */
 	const numPattern = /^(\d+\.?\d*)\s+(.+)$/;
 	m = raw.match(numPattern);
 	if (m) {
 		qty = parseFloat(m[1]);
-		name = m[2].trim();
+		name = cleanName(m[2]);
 		unit = 'piece';
 		return { raw, name, qty, unit };
 	}
 
-	/* pattern: "one bowl rice" or "a glass milk" (word number + unit + food) */
-	const wordUnitPattern = /^(an?|one|two|three|four|five)\s+(bowl|bowls|katori|plate|plates|glass|glasses|cup|cups|spoon|spoons|scoop|scoops|slice|slices|piece|pieces|tbsp|tablespoons?|tsp|teaspoons?|handful)\s+(.+)$/i;
-	m = raw.match(wordUnitPattern);
-	if (m) {
-		const wordToNum = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5 };
-		qty = wordToNum[m[1].toLowerCase()] || 1;
-		unit = UNIT_MAP[m[2].toLowerCase()] || m[2].toLowerCase();
-		name = m[3].trim();
-		return { raw, name, qty, unit };
-	}
-
-	/* pattern: "a banana" or "an apple" */
-	const articlePattern = /^(an?|one)\s+(.+)$/i;
+	/* 7. pattern: "a banana" or "an apple" */
+	const articlePattern = /^(an?)\s+(.+)$/i;
 	m = raw.match(articlePattern);
 	if (m) {
 		qty = 1;
-		name = m[2].trim();
+		name = cleanName(m[2]);
 		unit = 'piece';
 		return { raw, name, qty, unit };
 	}
 
-	/* fallback: just a food name, qty 1 serving */
-	return { raw, name, qty: 1, unit: 'serving' };
+	/* 8. fallback: just a food name, qty 1 serving */
+	return { raw, name: cleanName(raw), qty: 1, unit: 'serving' };
 }
 
 /**
  * Convert a parsed item to grams, given the food's default_serving_g.
  * @param {{ qty: number, unit: string }} item
- * @param {{ default_serving_g: number }} food
+ * @param {{ default_serving_g?: number }} food
+ * @param {string | null} [vesselSize]
  * @returns {number} grams
  */
 export function toGrams(item, food, vesselSize = null) {
@@ -173,7 +231,7 @@ export function toGrams(item, food, vesselSize = null) {
 	}
 	// Use vessel size if provided for ambiguous units
 	if (vesselSize && AMBIGUOUS_UNITS.has(item.unit) && VESSEL_SIZES[item.unit]) {
-		return item.qty * VESSEL_SIZES[item.unit][vesselSize];
+		return item.qty * (VESSEL_SIZES[item.unit][vesselSize] || 200);
 	}
 	if (UNIT_TO_GRAMS[item.unit]) {
 		return item.qty * UNIT_TO_GRAMS[item.unit];

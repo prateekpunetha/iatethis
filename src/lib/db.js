@@ -18,9 +18,139 @@ async function getDB() {
 	});
 }
 
-/** normalize a food name for matching */
-function normalize(name) {
-	return name.toLowerCase().trim().replace(/\s+/g, ' ');
+const SINGULAR_EXCEPTIONS = new Set([
+	'oats', 'hummus', 'couscous', 'citrus', 'basis', 'axis', 'lentils', 'chia'
+]);
+
+/**
+ * Convert plural food words to singular
+ * @param {string} word
+ */
+export function singularize(word) {
+	if (!word || word.length <= 2) return word;
+	const w = word.toLowerCase().trim();
+	if (SINGULAR_EXCEPTIONS.has(w)) return w;
+	if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
+	if (w.endsWith('tomatoes')) return w.slice(0, -2);
+	if (w.endsWith('potatoes')) return w.slice(0, -2);
+	if (w.endsWith('mangoes')) return w.slice(0, -2);
+	if (w.endsWith('sandwiches')) return w.slice(0, -2);
+	if (w.endsWith('glasses')) return w.slice(0, -2);
+	if (w.endsWith('dishes')) return w.slice(0, -2);
+	if (w.endsWith('s') && !w.endsWith('ss') && !w.endsWith('us')) {
+		return w.slice(0, -1);
+	}
+	return w;
+}
+
+/**
+ * Normalize a food name/query by removing punctuation and extra whitespace
+ * @param {string} name
+ */
+export function normalize(name) {
+	return (name || '')
+		.toLowerCase()
+		.replace(/[()[\]{},.;:!?\x27"\/\\_-]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+/**
+ * Stem a phrase into singular normalized tokens
+ * @param {string} phrase
+ */
+export function stem(phrase) {
+	return normalize(phrase)
+		.split(' ')
+		.filter(Boolean)
+		.map(singularize)
+		.join(' ');
+}
+
+/**
+ * Levenshtein distance between two strings
+ * @param {string} a
+ * @param {string} b
+ */
+function levenshtein(a, b) {
+	const m = a.length, n = b.length;
+	const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+	for (let i = 0; i <= m; i++) dp[i][0] = i;
+	for (let j = 0; j <= n; j++) dp[0][j] = j;
+	for (let i = 1; i <= m; i++) {
+		for (let j = 1; j <= n; j++) {
+			dp[i][j] = a[i - 1] === b[j - 1]
+				? dp[i - 1][j - 1]
+				: 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+		}
+	}
+	return dp[m][n];
+}
+
+/**
+ * Similarity score based on edit distance (0-1)
+ * @param {string} a
+ * @param {string} b
+ */
+function stringSimilarity(a, b) {
+	if (a === b) return 1;
+	const maxLen = Math.max(a.length, b.length);
+	if (maxLen === 0) return 1;
+	return 1 - (levenshtein(a, b) / maxLen);
+}
+
+/**
+ * Score candidate match against query (0-1)
+ * @param {string} query
+ * @param {string} candidate
+ */
+function scoreCandidate(query, candidate) {
+	const qNorm = normalize(query);
+	const cNorm = normalize(candidate);
+	if (!qNorm || !cNorm) return 0;
+	if (qNorm === cNorm) return 1.0;
+
+	const qStem = stem(query);
+	const cStem = stem(candidate);
+	if (qStem === cStem) return 0.98;
+
+	const qTokens = qStem.split(' ').filter(Boolean);
+	const cTokens = cStem.split(' ').filter(Boolean);
+	if (qTokens.length === 0 || cTokens.length === 0) return 0;
+
+	// Check sorted token equality (e.g. "boiled egg" vs "egg boiled")
+	if (qTokens.slice().sort().join(' ') === cTokens.slice().sort().join(' ')) {
+		return 0.95;
+	}
+
+	const qSet = new Set(qTokens);
+	const cSet = new Set(cTokens);
+	const common = qTokens.filter(t => cSet.has(t));
+
+	// All query tokens are in candidate (e.g. "egg" in "boiled egg")
+	if (common.length === qTokens.length) {
+		return 0.8 + 0.15 * (common.length / cTokens.length);
+	}
+
+	// All candidate tokens are in query (e.g. "chicken" in "cooked chicken breast")
+	if (common.length === cTokens.length) {
+		return 0.75 + 0.15 * (common.length / qTokens.length);
+	}
+
+	// Token overlap Jaccard
+	const union = new Set([...qTokens, ...cTokens]);
+	const jaccard = common.length / union.size;
+	if (jaccard >= 0.5) {
+		return 0.6 + 0.25 * jaccard;
+	}
+
+	// Edit distance for single word / close typos (e.g. "chiken" -> "chicken")
+	if (qTokens.length === 1 && cTokens.length === 1) {
+		const sim = stringSimilarity(qStem, cStem);
+		if (sim >= 0.75) return sim * 0.9;
+	}
+
+	return 0;
 }
 
 /** Get local date string YYYY-MM-DD */
@@ -28,49 +158,37 @@ function getLocalDateStr(date = new Date()) {
 	return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
 }
 
-/** simple similarity score between two strings (0-1) */
-function similarity(a, b) {
-	a = normalize(a);
-	b = normalize(b);
-	if (a === b) return 1;
-
-	/* token overlap */
-	const tokensA = new Set(a.split(' '));
-	const tokensB = new Set(b.split(' '));
-	const intersection = [...tokensA].filter(t => tokensB.has(t));
-	const union = new Set([...tokensA, ...tokensB]);
-	return intersection.length / union.size;
-}
-
 /**
  * Search for a food in the local database.
  * Returns the best match or null if nothing is close enough.
+ * @param {string} query
  */
 export async function findFood(query) {
+	if (!query || !query.trim()) return null;
 	const db = await getDB();
 	const all = await db.getAll('foods');
-	const q = normalize(query);
+	const qNorm = normalize(query);
+	const qStem = stem(query);
 
-	/* exact name match */
-	let match = all.find(f => normalize(f.name) === q);
-	if (match) return match;
+	/* 1. Direct exact or stemmed name / alias match */
+	for (const f of all) {
+		if (normalize(f.name) === qNorm || stem(f.name) === qStem) return f;
+		for (const a of (f.aliases || [])) {
+			if (normalize(a) === qNorm || stem(a) === qStem) return f;
+		}
+	}
 
-	/* alias match */
-	match = all.find(f =>
-		(f.aliases || []).some(a => normalize(a) === q)
-	);
-	if (match) return match;
-
-	/* fuzzy match */
+	/* 2. Fuzzy / scored match */
 	let best = null;
 	let bestScore = 0;
 	for (const f of all) {
-		const nameScore = similarity(q, f.name);
-		const aliasScores = (f.aliases || []).map(a => similarity(q, a));
-		const score = Math.max(nameScore, ...aliasScores);
-		if (score > bestScore) {
-			best = f;
-			bestScore = score;
+		const candidates = [f.name, ...(f.aliases || [])];
+		for (const cand of candidates) {
+			const sc = scoreCandidate(query, cand);
+			if (sc > bestScore) {
+				bestScore = sc;
+				best = f;
+			}
 		}
 	}
 
@@ -78,14 +196,28 @@ export async function findFood(query) {
 	return null;
 }
 
-/** Save a food entry to the local database */
+/**
+ * Save a food entry to the local database, merging aliases if it already exists
+ * @param {any} food
+ */
 export async function saveFood(food) {
+	if (!food || !food.name) return null;
 	const db = await getDB();
 	/* check if we already have this food */
 	const existing = await findFood(food.name);
 	if (existing) {
-		/* update existing */
-		await db.put('foods', { ...existing, ...food, id: existing.id, updated_at: new Date().toISOString() });
+		/* merge aliases without duplicates */
+		const mergedAliases = Array.from(new Set([
+			...(existing.aliases || []),
+			...(food.aliases || [])
+		]));
+		await db.put('foods', {
+			...existing,
+			...food,
+			aliases: mergedAliases,
+			id: existing.id,
+			updated_at: new Date().toISOString()
+		});
 		return existing.id;
 	}
 	const id = await db.add('foods', {
@@ -97,7 +229,10 @@ export async function saveFood(food) {
 	return id;
 }
 
-/** Increment usage count for a food */
+/**
+ * Increment usage count for a food
+ * @param {number} id
+ */
 export async function bumpUsage(id) {
 	const db = await getDB();
 	const food = await db.get('foods', id);
@@ -107,7 +242,11 @@ export async function bumpUsage(id) {
 	}
 }
 
-/** Log a meal entry */
+/**
+ * Log a meal entry
+ * @param {any[]} items
+ * @param {string} [rawInput]
+ */
 export async function logMeal(items, rawInput = '') {
 	const db = await getDB();
 	const today = getLocalDateStr();
@@ -120,13 +259,20 @@ export async function logMeal(items, rawInput = '') {
 	return db.add('meals', entry);
 }
 
-/** Delete a specific meal */
+/**
+ * Delete a specific meal
+ * @param {number} id
+ */
 export async function deleteMeal(id) {
 	const db = await getDB();
 	await db.delete('meals', id);
 }
 
-/** Delete a single item from a meal */
+/**
+ * Delete a single item from a meal
+ * @param {number} mealId
+ * @param {number} itemIdx
+ */
 export async function deleteMealItem(mealId, itemIdx) {
 	const db = await getDB();
 	const meal = await db.get('meals', mealId);
@@ -158,10 +304,13 @@ export async function getAllFoods() {
 export async function getAllMeals() {
 	const db = await getDB();
 	const all = await db.getAll('meals');
-	return all.sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at));
+	return all.sort((a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime());
 }
 
-/** Get frequently used foods, sorted by times_used desc */
+/**
+ * Get frequently used foods, sorted by times_used desc
+ * @param {number} [limit]
+ */
 export async function getFrequentFoods(limit = 10) {
 	const db = await getDB();
 	const all = await db.getAll('foods');
@@ -171,36 +320,71 @@ export async function getFrequentFoods(limit = 10) {
 		.slice(0, limit);
 }
 
-/** Search foods by name */
+/**
+ * Search foods by name or alias (with plural/stem support)
+ * @param {string} query
+ */
 export async function searchFoods(query) {
 	const db = await getDB();
 	const all = await db.getAll('foods');
-	const q = query.toLowerCase().trim();
-	if (!q) return [];
-	return all.filter(f => 
-		f.name.toLowerCase().includes(q) ||
-		(f.aliases || []).some(a => a.toLowerCase().includes(q))
-	).slice(0, 20);
+	const qNorm = normalize(query);
+	const qStem = stem(query);
+	if (!qNorm) return [];
+
+	return all.filter(f => {
+		const candidates = [f.name, ...(f.aliases || [])];
+		return candidates.some(c => {
+			const cNorm = normalize(c);
+			const cStem = stem(c);
+			return cNorm.includes(qNorm) || cStem.includes(qStem) || qStem.includes(cStem);
+		});
+	}).slice(0, 20);
 }
 
-/** Seed the database with initial foods (only if empty) */
+/**
+ * Seed the database with initial foods (or sync seed aliases if already present)
+ * @param {any[]} foods
+ */
 export async function seedIfEmpty(foods) {
 	const db = await getDB();
 	const count = await db.count('foods');
-	if (count > 0) return false;
-
-	const tx = db.transaction('foods', 'readwrite');
-	for (const food of foods) {
-		tx.store.add({
-			...food,
-			source: 'seed',
-			created_at: new Date().toISOString(),
-			updated_at: new Date().toISOString(),
-			times_used: 0
-		});
+	if (count === 0) {
+		const tx = db.transaction('foods', 'readwrite');
+		for (const food of foods) {
+			tx.store.add({
+				...food,
+				source: 'seed',
+				created_at: new Date().toISOString(),
+				updated_at: new Date().toISOString(),
+				times_used: 0
+			});
+		}
+		await tx.done;
+		return true;
+	} else {
+		// Sync seed aliases to ensure new seed aliases exist in existing local DB
+		const tx = db.transaction('foods', 'readwrite');
+		const all = await tx.store.getAll();
+		for (const seed of foods) {
+			const existing = all.find(f => normalize(f.name) === normalize(seed.name));
+			if (existing) {
+				const existingAliases = new Set(existing.aliases || []);
+				let changed = false;
+				for (const alias of (seed.aliases || [])) {
+					if (!existingAliases.has(alias)) {
+						existingAliases.add(alias);
+						changed = true;
+					}
+				}
+				if (changed) {
+					existing.aliases = Array.from(existingAliases);
+					tx.store.put(existing);
+				}
+			}
+		}
+		await tx.done;
+		return false;
 	}
-	await tx.done;
-	return true;
 }
 
 /** Delete all meals for today */
@@ -215,18 +399,25 @@ export async function clearTodaysMeals() {
 	await tx.done;
 }
 
-/** Get meals for the last N days, grouped by date */
+/**
+ * Get meals for the last N days, grouped by date
+ * @param {number} [days]
+ */
 export async function getMealsForDays(days = 7) {
 	const db = await getDB();
 	const all = await db.getAll('meals');
 	const cutoff = new Date();
 	cutoff.setDate(cutoff.getDate() - days);
 	cutoff.setHours(0, 0, 0, 0);
-	return all.filter(m => new Date(m.logged_at) >= cutoff)
-		.sort((a, b) => new Date(a.logged_at) - new Date(b.logged_at));
+	return all.filter(m => new Date(m.logged_at).getTime() >= cutoff.getTime())
+		.sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime());
 }
 
-/** Get saved vessel size preference for a food+unit combo */
+/**
+ * Get saved vessel size preference for a food+unit combo
+ * @param {string} foodName
+ * @param {string} unit
+ */
 export function getVesselPref(foodName, unit) {
   try {
     const prefs = JSON.parse(localStorage.getItem('iatethis_vessel_prefs') || '{}');
@@ -234,7 +425,12 @@ export function getVesselPref(foodName, unit) {
   } catch { return null; }
 }
 
-/** Save vessel size preference for a food+unit combo */
+/**
+ * Save vessel size preference for a food+unit combo
+ * @param {string} foodName
+ * @param {string} unit
+ * @param {string} size
+ */
 export function saveVesselPref(foodName, unit, size) {
   try {
     const prefs = JSON.parse(localStorage.getItem('iatethis_vessel_prefs') || '{}');

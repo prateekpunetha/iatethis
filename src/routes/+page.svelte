@@ -535,7 +535,6 @@
 		if (!input.trim() || loading) return;
 
 		loading = true;
-		status = { type: 'loading', message: 'analyzing...' };
 		const rawInput = input;
 
 		const parsed = parseInput(input);
@@ -554,6 +553,7 @@
 				let source = 'local';
 
 				if (!food) {
+					status = { type: 'loading', message: `analyzing ${item.name}...` };
 					try {
 						const res = await fetch('/api/lookup', {
 							method: 'POST',
@@ -567,6 +567,12 @@
 						}
 
 						food = await res.json();
+						// Ensure queried item name is preserved in aliases so future lookups match locally offline
+						if (!food.aliases) food.aliases = [];
+						const queryClean = item.name.toLowerCase().trim();
+						if (!food.aliases.some((/** @type {string} */ a) => a.toLowerCase().trim() === queryClean)) {
+							food.aliases.push(queryClean);
+						}
 						food.id = await saveFood(food);
 						source = 'gemini';
 						dbCount = (await getAllFoods()).length;

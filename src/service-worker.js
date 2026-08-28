@@ -7,6 +7,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+	self.skipWaiting();
 	/* Create a new cache and add all files to it */
 	async function addFilesToCache() {
 		const cache = await caches.open(CACHE);
@@ -16,20 +17,22 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-	/* Remove previous cached data from disk */
-	async function deleteOldCaches() {
-		for (const key of await caches.keys()) {
+	/* Remove previous cached data from disk and take immediate control */
+	async function activateWorker() {
+		const keys = await caches.keys();
+		for (const key of keys) {
 			if (key !== CACHE) await caches.delete(key);
 		}
+		await self.clients.claim();
 	}
-	event.waitUntil(deleteOldCaches());
+	event.waitUntil(activateWorker());
 });
 
 self.addEventListener('fetch', (event) => {
 	/* ignore POST requests etc */
 	if (event.request.method !== 'GET') return;
 
-	/* ignore api calls (let them fail if offline so they fall through to our catch block, or just don't cache them) */
+	/* ignore api calls (let them fail if offline so they fall through to catch block) */
 	if (event.request.url.includes('/api/')) return;
 
 	async function respond() {
@@ -38,7 +41,8 @@ self.addEventListener('fetch', (event) => {
 
 		/* `build`/`files` can always be served from the cache */
 		if (ASSETS.includes(url.pathname)) {
-			return cache.match(url.pathname);
+			const cachedAsset = await cache.match(url.pathname);
+			if (cachedAsset) return cachedAsset;
 		}
 
 		/* for everything else, try the network first, but */
@@ -52,7 +56,16 @@ self.addEventListener('fetch', (event) => {
 
 			return response;
 		} catch {
-			return cache.match(event.request);
+			const cached = await cache.match(event.request);
+			if (cached) return cached;
+
+			// For offline navigation to root or subpaths
+			if (event.request.mode === 'navigate') {
+				const fallback = await cache.match('/');
+				if (fallback) return fallback;
+			}
+
+			return Response.error();
 		}
 	}
 
