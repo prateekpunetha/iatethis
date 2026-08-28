@@ -2,7 +2,7 @@
 	import { onMount, tick } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
-	import { parseInput, toGrams } from '$lib/parser.js';
+	import { parseInput, toGrams, AMBIGUOUS_UNITS, VESSEL_SIZES, VESSEL_ICONS, hasAmbiguousUnit } from '$lib/parser.js';
 	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal, deleteMealItem, getAllMeals, getFrequentFoods, searchFoods, getMealsForDays } from '$lib/db.js';
 	import { SEED_FOODS } from '$lib/seeds.js';
 
@@ -16,6 +16,10 @@
 	let status = $state(null); // { type: 'loading'|'error'|'success', message: '' }
 	let dbCount = $state(0);
 	let loading = $state(false);
+	
+	/* Portion size picker state */
+	let sizePicker = $state(null); // { items: [{parsedItem, food, source}], currentIdx: 0 }
+	let sizePickerAnimating = $state(false);
 	let removingItems = $state(new Set());
 	let theme = $state('dark');
 	let activeTab = $state('daily');
@@ -296,6 +300,8 @@
 	};
 
 	function getFoodIcon(item) {
+		// Use vessel icon if item was logged with a vessel unit
+		if (item.unit && VESSEL_ICONS[item.unit]) return VESSEL_ICONS[item.unit];
 		const lower = (item.name || '').toLowerCase();
 		for (const [key, icon] of Object.entries(foodIcons)) {
 			if (key !== 'default' && lower.includes(key)) return icon;
@@ -539,7 +545,7 @@
 			return;
 		}
 
-		const newItems = [];
+		const resolvedItems = [];
 		const missed = [];
 
 		for (const item of parsed) {
@@ -580,38 +586,9 @@
 					continue;
 				}
 
-				const grams = toGrams(item, food);
-				const macros = food.per_100g;
-				const factor = grams / 100;
-
-				newItems.push({
-					name: food.name,
-					qty: item.qty,
-					unit: item.unit,
-					qty_g: Math.round(grams),
-					cal: round1((macros.cal || 0) * factor),
-					protein: round1((macros.protein || 0) * factor),
-					fat: round1((macros.fat || 0) * factor),
-					carbs: round1((macros.carbs || 0) * factor),
-					fiber: round1((macros.fiber || 0) * factor),
-					icon: food.icon,
-					source
-				});
-
-				if (food.id) await bumpUsage(food.id);
+				resolvedItems.push({ parsedItem: item, food, source });
 			} catch (err) {
 				missed.push(item.name);
-			}
-		}
-
-		if (newItems.length > 0) {
-			await logMeal(newItems, rawInput);
-			await loadTodaysMeals();
-			
-			/* Trigger PWA install banner if applicable */
-			const dismissed = localStorage.getItem('iatethis_install_dismissed');
-			if (deferredPrompt && !dismissed) {
-				showInstallBanner = true;
 			}
 		}
 
@@ -621,8 +598,107 @@
 			status = null;
 		}
 
+		if (resolvedItems.length === 0) {
+			loading = false;
+			return;
+		}
+
+		// Check if any items need size disambiguation
+		const firstIdx = resolvedItems.findIndex(r => hasAmbiguousUnit(r.parsedItem));
+
+		if (firstIdx >= 0) {
+			sizePicker = { items: resolvedItems, currentIdx: firstIdx, rawInput, pickedSizes: {} };
+			sizePickerAnimating = true;
+			loading = false;
+			input = '';
+			return;
+		}
+
+		// No ambiguous items — log directly
+		await logResolvedItems(resolvedItems, rawInput, {});
 		input = '';
 		loading = false;
+	}
+
+	/** Log resolved items (with vessel sizes from picker) */
+	async function logResolvedItems(resolvedItems, rawInput, pickedSizes = {}) {
+		const newItems = [];
+		for (let i = 0; i < resolvedItems.length; i++) {
+			const { parsedItem, food, source } = resolvedItems[i];
+			const vesselSize = hasAmbiguousUnit(parsedItem) ? (pickedSizes[i] || 'medium') : null;
+			const grams = toGrams(parsedItem, food, vesselSize);
+			const macros = food.per_100g;
+			const factor = grams / 100;
+
+			newItems.push({
+				name: food.name,
+				qty: parsedItem.qty,
+				unit: parsedItem.unit,
+				qty_g: Math.round(grams),
+				cal: round1((macros.cal || 0) * factor),
+				protein: round1((macros.protein || 0) * factor),
+				fat: round1((macros.fat || 0) * factor),
+				carbs: round1((macros.carbs || 0) * factor),
+				fiber: round1((macros.fiber || 0) * factor),
+				icon: food.icon,
+				source
+			});
+
+			if (food.id) await bumpUsage(food.id);
+		}
+
+		if (newItems.length > 0) {
+			await logMeal(newItems, rawInput);
+			await loadTodaysMeals();
+
+			const dismissed = localStorage.getItem('iatethis_install_dismissed');
+			if (deferredPrompt && !dismissed) {
+				showInstallBanner = true;
+			}
+		}
+	}
+
+	/** Handle size picker selection */
+	async function pickVesselSize(size) {
+		if (!sizePicker) return;
+		const { items, currentIdx, rawInput, pickedSizes } = sizePicker;
+		
+		// Store this pick
+		pickedSizes[currentIdx] = size;
+		
+		// Find next ambiguous item that hasn't been picked yet
+		let nextIdx = -1;
+		for (let i = currentIdx + 1; i < items.length; i++) {
+			if (hasAmbiguousUnit(items[i].parsedItem) && !pickedSizes[i]) {
+				nextIdx = i;
+				break;
+			}
+		}
+
+		if (nextIdx >= 0) {
+			// More items to disambiguate — animate transition
+			sizePickerAnimating = false;
+			await new Promise(r => setTimeout(r, 150));
+			sizePicker = { ...sizePicker, currentIdx: nextIdx, pickedSizes };
+			sizePickerAnimating = true;
+		} else {
+			// All done — log everything
+			sizePickerAnimating = false;
+			await new Promise(r => setTimeout(r, 150));
+			await logResolvedItems(items, rawInput, pickedSizes);
+			sizePicker = null;
+			status = null;
+		}
+	}
+
+	/** Dismiss size picker (use medium for remaining) */
+	function dismissSizePicker() {
+		if (!sizePicker) return;
+		const { items, rawInput, pickedSizes } = sizePicker;
+		sizePicker = null;
+		sizePickerAnimating = false;
+		logResolvedItems(items, rawInput, pickedSizes);
+		status = null;
 	}
 
 	async function deleteMealEntry(id) {
@@ -661,7 +737,7 @@
 	}
 
 	function handleKeydown(e) {
-		if (e.key === 'Enter') handleSubmit();
+		if (e.key === 'Enter' && !sizePicker) handleSubmit();
 	}
 
 	function formatQty(item) {
@@ -845,6 +921,37 @@
 					{/if}
 				</button>
 			</div>
+			{#if sizePicker}
+				{@const current = sizePicker.items[sizePicker.currentIdx]}
+				{@const unitKey = current.parsedItem.unit}
+				{@const sizes = VESSEL_SIZES[unitKey] || VESSEL_SIZES.bowl}
+				{@const icon = VESSEL_ICONS[unitKey] || 'soup_kitchen'}
+				<div class="size-picker" class:size-picker-visible={sizePickerAnimating}>
+					<div class="size-picker-header">
+						<span class="size-picker-label">How much <strong>{current.food.name}</strong>?</span>
+						<button class="size-picker-dismiss" onclick={dismissSizePicker} aria-label="Skip, use medium">
+							<span class="material-symbols-outlined">close</span>
+						</button>
+					</div>
+					<div class="size-picker-options">
+						{#each [['small', sizes.small], ['medium', sizes.medium], ['large', sizes.large]] as [sizeKey, grams], i}
+							<button
+								class="size-option"
+								class:size-option-default={sizeKey === 'medium'}
+								style="animation-delay: {i * 80}ms"
+								onclick={() => pickVesselSize(sizeKey)}
+							>
+								<span
+									class="material-symbols-outlined size-option-icon"
+									style="font-size: {20 + i * 8}px"
+								>{icon}</span>
+								<span class="size-option-label">{sizeKey}</span>
+								<span class="size-option-grams">~{grams}g</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
 		</section>
 
 		<!-- Today's Log -->

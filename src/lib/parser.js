@@ -57,6 +57,30 @@ const UNIT_TO_GRAMS = {
 	'ml': 1, // rough, assuming water-like density
 };
 
+/** Vessel types that need size disambiguation */
+export const AMBIGUOUS_UNITS = new Set(['bowl', 'spoon', 'glass', 'plate']);
+
+/** Gram mappings for small/medium/large vessels */
+export const VESSEL_SIZES = {
+  bowl:   { small: 100, medium: 200, large: 350 },
+  spoon:  { small: 5,   medium: 15,  large: 30 },
+  glass:  { small: 150, medium: 250, large: 400 },
+  plate:  { small: 200, medium: 300, large: 450 },
+};
+
+/** Vessel display icons (Material Symbols) */
+export const VESSEL_ICONS = {
+  bowl:  'soup_kitchen',
+  spoon: 'flatware',
+  glass: 'local_drink',
+  plate: 'dining',
+};
+
+/** Check if a parsed item uses an ambiguous vessel unit */
+export function hasAmbiguousUnit(item) {
+  return AMBIGUOUS_UNITS.has(item.unit);
+}
+
 /**
  * @param {string} input
  * @returns {Array<{ raw: string, name: string, qty: number, unit: string }>}
@@ -80,7 +104,7 @@ function parseSingleItem(raw) {
 	let unit = 'piece';
 
 	/* pattern: "200g chicken breast" or "200 g chicken breast" */
-	const prePattern = /^(\d+\.?\d*)\s*(g|gm|gms|gram|grams|kg|ml|cup|cups|tbsp|tablespoons?|tsp|teaspoons?|pieces?|pcs?|pc|slices?|bowls?|katori|plates?|glasses?|scoops?|handful)\s+(.+)$/i;
+	const prePattern = /^(\d+\.?\d*)\s*(g|gm|gms|gram|grams|kg|ml|cup|cups|tbsp|tablespoons?|tsp|teaspoons?|pieces?|pcs?|pc|slices?|bowls?|katori|plates?|glass|glasses|scoops?|handful|spoons?)\s+(.+)$/i;
 	let m = raw.match(prePattern);
 	if (m) {
 		qty = parseFloat(m[1]);
@@ -90,7 +114,7 @@ function parseSingleItem(raw) {
 	}
 
 	/* pattern: "chicken breast 200g" or "chicken 200 grams" */
-	const postPattern = /^(.+?)\s+(\d+\.?\d*)\s*(g|gm|gms|gram|grams|kg|ml|cup|cups|tbsp|tablespoons?|tsp|teaspoons?|pieces?|pcs?|pc|slices?|bowls?|katori|plates?|glasses?|scoops?|handful)$/i;
+	const postPattern = /^(.+?)\s+(\d+\.?\d*)\s*(g|gm|gms|gram|grams|kg|ml|cup|cups|tbsp|tablespoons?|tsp|teaspoons?|pieces?|pcs?|pc|slices?|bowls?|katori|plates?|glass|glasses|scoops?|handful|spoons?)$/i;
 	m = raw.match(postPattern);
 	if (m) {
 		name = m[1].trim();
@@ -106,6 +130,17 @@ function parseSingleItem(raw) {
 		qty = parseFloat(m[1]);
 		name = m[2].trim();
 		unit = 'piece';
+		return { raw, name, qty, unit };
+	}
+
+	/* pattern: "one bowl rice" or "a glass milk" (word number + unit + food) */
+	const wordUnitPattern = /^(an?|one|two|three|four|five)\s+(bowl|bowls|katori|plate|plates|glass|glasses|cup|cups|spoon|spoons|scoop|scoops|slice|slices|piece|pieces|tbsp|tablespoons?|tsp|teaspoons?|handful)\s+(.+)$/i;
+	m = raw.match(wordUnitPattern);
+	if (m) {
+		const wordToNum = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5 };
+		qty = wordToNum[m[1].toLowerCase()] || 1;
+		unit = UNIT_MAP[m[2].toLowerCase()] || m[2].toLowerCase();
+		name = m[3].trim();
 		return { raw, name, qty, unit };
 	}
 
@@ -129,12 +164,16 @@ function parseSingleItem(raw) {
  * @param {{ default_serving_g: number }} food
  * @returns {number} grams
  */
-export function toGrams(item, food) {
+export function toGrams(item, food, vesselSize = null) {
 	if (item.unit === 'g') {
 		return item.qty;
 	}
 	if (item.unit === 'piece' || item.unit === 'serving' || item.unit === 'scoop' || item.unit === 'slice') {
 		return item.qty * (food.default_serving_g || 100);
+	}
+	// Use vessel size if provided for ambiguous units
+	if (vesselSize && AMBIGUOUS_UNITS.has(item.unit) && VESSEL_SIZES[item.unit]) {
+		return item.qty * VESSEL_SIZES[item.unit][vesselSize];
 	}
 	if (UNIT_TO_GRAMS[item.unit]) {
 		return item.qty * UNIT_TO_GRAMS[item.unit];

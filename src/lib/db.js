@@ -225,3 +225,20 @@ export async function getMealsForDays(days = 7) {
 	return all.filter(m => new Date(m.logged_at) >= cutoff)
 		.sort((a, b) => new Date(a.logged_at) - new Date(b.logged_at));
 }
+
+/** Get saved vessel size preference for a food+unit combo */
+export function getVesselPref(foodName, unit) {
+  try {
+    const prefs = JSON.parse(localStorage.getItem('iatethis_vessel_prefs') || '{}');
+    return prefs[`${normalize(foodName)}:${unit}`] || null;
+  } catch { return null; }
+}
+
+/** Save vessel size preference for a food+unit combo */
+export function saveVesselPref(foodName, unit, size) {
+  try {
+    const prefs = JSON.parse(localStorage.getItem('iatethis_vessel_prefs') || '{}');
+    prefs[`${normalize(foodName)}:${unit}`] = size;
+    localStorage.setItem('iatethis_vessel_prefs', JSON.stringify(prefs));
+  } catch { /* ignore */ }
+}
