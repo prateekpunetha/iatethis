@@ -1,7 +1,7 @@
 {
 	"name": "iatethis",
 	"short_name": "iatethis",
-	"description": "track what you eat. macros from any food, learned and cached locally.",
+	"description": "A simple meal tracker where you just type what you ate. AI learns your foods once, then works offline forever.",
 	"start_url": "/",
 	"display": "standalone",
 	"background_color": "#141218",
