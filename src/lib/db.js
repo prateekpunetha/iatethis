@@ -125,21 +125,34 @@ function scoreCandidate(query, candidate) {
 
 	const qSet = new Set(qTokens);
 	const cSet = new Set(cTokens);
-	const common = qTokens.filter(t => cSet.has(t));
+	
+	// Tokens in query that are also in candidate
+	const commonQ = qTokens.filter(t => cSet.has(t));
+	// Tokens in candidate that are also in query
+	const commonC = cTokens.filter(t => qSet.has(t));
 
 	// All query tokens are in candidate (e.g. "egg" in "boiled egg")
-	if (common.length === qTokens.length) {
-		return 0.8 + 0.15 * (common.length / cTokens.length);
+	if (commonQ.length === qTokens.length) {
+		const ratio = qTokens.length / cTokens.length;
+		if (ratio >= 0.5) {
+			return 0.75 + 0.25 * ratio;
+		}
+		return 0.5 + 0.3 * ratio;
 	}
 
 	// All candidate tokens are in query (e.g. "chicken" in "cooked chicken breast")
-	if (common.length === cTokens.length) {
-		return 0.75 + 0.15 * (common.length / qTokens.length);
+	if (commonC.length === cTokens.length) {
+		const ratio = cTokens.length / qTokens.length;
+		if (ratio >= 0.5) {
+			return 0.75 + 0.25 * ratio;
+		}
+		return 0.5 + 0.3 * ratio;
 	}
 
 	// Token overlap Jaccard
 	const union = new Set([...qTokens, ...cTokens]);
-	const jaccard = common.length / union.size;
+	const uniqueCommon = new Set(commonQ);
+	const jaccard = uniqueCommon.size / union.size;
 	if (jaccard >= 0.5) {
 		return 0.6 + 0.25 * jaccard;
 	}
