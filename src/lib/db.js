@@ -68,7 +68,7 @@ export function stem(phrase) {
 }
 
 /**
- * Levenshtein distance between two strings
+ * Levenshtein distance with transpositions (Damerau-Levenshtein)
  * @param {string} a
  * @param {string} b
  */
@@ -79,9 +79,15 @@ function levenshtein(a, b) {
 	for (let j = 0; j <= n; j++) dp[0][j] = j;
 	for (let i = 1; i <= m; i++) {
 		for (let j = 1; j <= n; j++) {
-			dp[i][j] = a[i - 1] === b[j - 1]
-				? dp[i - 1][j - 1]
-				: 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+			const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+			dp[i][j] = Math.min(
+				dp[i - 1][j] + 1, // deletion
+				dp[i][j - 1] + 1, // insertion
+				dp[i - 1][j - 1] + cost // substitution
+			);
+			if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+				dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + cost); // transposition
+			}
 		}
 	}
 	return dp[m][n];
@@ -134,19 +140,17 @@ function scoreCandidate(query, candidate) {
 	// All query tokens are in candidate (e.g. "egg" in "boiled egg")
 	if (commonQ.length === qTokens.length) {
 		const ratio = qTokens.length / cTokens.length;
-		if (ratio >= 0.5) {
-			return 0.75 + 0.25 * ratio;
-		}
-		return 0.5 + 0.3 * ratio;
+		if (ratio === 1.0) return 1.0;
+		if (ratio > 0.5) return 0.7 + 0.25 * ratio;
+		return 0.4 + 0.3 * ratio;
 	}
 
 	// All candidate tokens are in query (e.g. "chicken" in "cooked chicken breast")
 	if (commonC.length === cTokens.length) {
 		const ratio = cTokens.length / qTokens.length;
-		if (ratio >= 0.5) {
-			return 0.75 + 0.25 * ratio;
-		}
-		return 0.5 + 0.3 * ratio;
+		if (ratio === 1.0) return 1.0;
+		if (ratio >= 0.6) return 0.7 + 0.25 * ratio; // needs to be at least 60% of query
+		return 0.4 + 0.4 * ratio;
 	}
 
 	// Token overlap Jaccard
@@ -157,10 +161,12 @@ function scoreCandidate(query, candidate) {
 		return 0.6 + 0.25 * jaccard;
 	}
 
-	// Edit distance for single word / close typos (e.g. "chiken" -> "chicken")
+	// Edit distance for single word / close typos (e.g. "vhikcn" -> "chicken")
 	if (qTokens.length === 1 && cTokens.length === 1) {
 		const sim = stringSimilarity(qStem, cStem);
-		if (sim >= 0.75) return sim * 0.9;
+		if (sim >= 0.55) {
+			return 0.65 + 0.3 * sim; // maps 0.55->0.81, 1.0->0.95
+		}
 	}
 
 	return 0;
@@ -378,6 +384,7 @@ export async function seedIfEmpty(foods) {
 		// Sync seed aliases to ensure new seed aliases exist in existing local DB
 		const tx = db.transaction('foods', 'readwrite');
 		const all = await tx.store.getAll();
+		let added = false;
 		for (const seed of foods) {
 			const existing = all.find(f => normalize(f.name) === normalize(seed.name));
 			if (existing) {
@@ -393,10 +400,20 @@ export async function seedIfEmpty(foods) {
 					existing.aliases = Array.from(existingAliases);
 					tx.store.put(existing);
 				}
+			} else {
+				// Insert the missing seed
+				tx.store.add({
+					...seed,
+					source: 'seed',
+					created_at: new Date().toISOString(),
+					updated_at: new Date().toISOString(),
+					times_used: 0
+				});
+				added = true;
 			}
 		}
 		await tx.done;
-		return false;
+		return added;
 	}
 }
 
