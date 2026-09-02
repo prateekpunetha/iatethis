@@ -480,3 +480,25 @@ export function saveVesselPref(foodName, unit, size) {
     localStorage.setItem('iatethis_vessel_prefs', JSON.stringify(prefs));
   } catch { /* ignore */ }
 }
+
+
+/** Remove overly long aliases caused by old bug */
+export async function cleanupBadAliases() {
+	const db = await getDB();
+	const all = await db.getAll('foods');
+	let changed = false;
+	const tx = db.transaction('foods', 'readwrite');
+	for (const f of all) {
+		if (f.aliases && f.aliases.length > 0) {
+			const originalLength = f.aliases.length;
+			// Keep aliases that are reasonably short
+			f.aliases = f.aliases.filter(a => a.split(' ').length <= 4);
+			if (f.aliases.length !== originalLength) {
+				tx.store.put(f);
+				changed = true;
+			}
+		}
+	}
+	await tx.done;
+	return changed;
+}

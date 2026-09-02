@@ -3,7 +3,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { parseInput, toGrams, AMBIGUOUS_UNITS, VESSEL_SIZES, VESSEL_ICONS, hasAmbiguousUnit } from '$lib/parser.js';
-	import { findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal, deleteMealItem, getAllMeals, getFrequentFoods, searchFoods, getMealsForDays } from '$lib/db.js';
+	import { cleanupBadAliases, findFood, saveFood, bumpUsage, logMeal, getTodaysMeals, clearTodaysMeals, seedIfEmpty, getAllFoods, deleteMeal, deleteMealItem, getAllMeals, getFrequentFoods, searchFoods, getMealsForDays } from '$lib/db.js';
 	import { SEED_FOODS } from '$lib/seeds.js';
 
 	/** Get local date string YYYY-MM-DD */
@@ -312,6 +312,7 @@
 	onMount(async () => {
 		loadProfile();
 		await seedIfEmpty(SEED_FOODS);
+		await cleanupBadAliases();
 		await loadTodaysMeals();
 		dbCount = (await getAllFoods()).length;
 
