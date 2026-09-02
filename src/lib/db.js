@@ -207,6 +207,18 @@ export async function findFood(query) {
 			if (sc > bestScore) {
 				bestScore = sc;
 				best = f;
+			} else if (sc === bestScore && sc > 0 && best) {
+				// Tiebreaker: prefer more frequently used foods
+				const fTimes = f.times_used || 0;
+				const bestTimes = best.times_used || 0;
+				if (fTimes > bestTimes) {
+					best = f;
+				} else if (fTimes === bestTimes) {
+					// Secondary tiebreaker: prefer shorter names (more generic)
+					if (f.name.length < best.name.length) {
+						best = f;
+					}
+				}
 			}
 		}
 	}
