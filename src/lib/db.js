@@ -141,7 +141,7 @@ function scoreCandidate(query, candidate) {
 	if (commonQ.length === qTokens.length) {
 		const ratio = qTokens.length / cTokens.length;
 		if (ratio === 1.0) return 1.0;
-		if (ratio > 0.5) return 0.7 + 0.25 * ratio;
+		if (ratio >= 0.5) return 0.7 + 0.25 * ratio;
 		return 0.4 + 0.3 * ratio;
 	}
 
