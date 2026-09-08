@@ -131,34 +131,62 @@ function scoreCandidate(query, candidate) {
 
 	const qSet = new Set(qTokens);
 	const cSet = new Set(cTokens);
+
+	/**
+	 * Fuzzy-match a token against a set of tokens.
+	 * Returns true if the token exactly matches or is very similar (edit distance)
+	 * to any token in the target set.
+	 */
+	function fuzzyHas(token, targetTokens) {
+		for (const t of targetTokens) {
+			if (t === token) return true;
+			// Only do edit distance for tokens of reasonable length (>= 4 chars)
+			if (token.length >= 4 && t.length >= 4) {
+				const sim = stringSimilarity(token, t);
+				if (sim >= 0.7) return true;
+			}
+		}
+		return false;
+	}
 	
-	// Tokens in query that are also in candidate
+	// Tokens in query that are also in candidate (exact)
 	const commonQ = qTokens.filter(t => cSet.has(t));
-	// Tokens in candidate that are also in query
+	// Tokens in candidate that are also in query (exact)
 	const commonC = cTokens.filter(t => qSet.has(t));
 
+	// Tokens in query that fuzzy-match candidate tokens
+	const fuzzyCommonQ = qTokens.filter(t => fuzzyHas(t, cTokens));
+	// Tokens in candidate that fuzzy-match query tokens
+	const fuzzyCommonC = cTokens.filter(t => fuzzyHas(t, qTokens));
+
 	// All query tokens are in candidate (e.g. "egg" in "boiled egg")
-	if (commonQ.length === qTokens.length) {
+	// Use fuzzy matching so "shawarma" matches "schwarma"
+	if (fuzzyCommonQ.length === qTokens.length) {
 		const ratio = qTokens.length / cTokens.length;
-		if (ratio === 1.0) return 1.0;
-		if (ratio >= 0.5) return 0.8 + 0.15 * ratio;
-		return 0.4 + 0.3 * ratio;
+		// Discount slightly if any match was fuzzy (not exact)
+		const exactCount = commonQ.length;
+		const fuzzyPenalty = exactCount === qTokens.length ? 0 : 0.03;
+		if (ratio === 1.0) return 1.0 - fuzzyPenalty;
+		if (ratio >= 0.5) return 0.8 + 0.15 * ratio - fuzzyPenalty;
+		return 0.4 + 0.3 * ratio - fuzzyPenalty;
 	}
 
 	// All candidate tokens are in query (e.g. "chicken" in "cooked chicken breast")
-	if (commonC.length === cTokens.length) {
+	if (fuzzyCommonC.length === cTokens.length) {
 		const ratio = cTokens.length / qTokens.length;
-		if (ratio === 1.0) return 1.0;
-		if (ratio >= 0.6) return 0.7 + 0.25 * ratio; // needs to be at least 60% of query
-		return 0.4 + 0.4 * ratio;
+		const exactCount = commonC.length;
+		const fuzzyPenalty = exactCount === cTokens.length ? 0 : 0.03;
+		if (ratio === 1.0) return 1.0 - fuzzyPenalty;
+		if (ratio >= 0.6) return 0.7 + 0.25 * ratio - fuzzyPenalty;
+		return 0.4 + 0.4 * ratio - fuzzyPenalty;
 	}
 
-	// Token overlap Jaccard
-	const union = new Set([...qTokens, ...cTokens]);
-	const uniqueCommon = new Set(commonQ);
-	const jaccard = uniqueCommon.size / union.size;
-	if (jaccard >= 0.5) {
-		return 0.6 + 0.25 * jaccard;
+	// Token overlap Jaccard (use fuzzy matching)
+	const fuzzyMatchedCount = fuzzyCommonQ.length;
+	const totalUnique = new Set([...qTokens, ...cTokens]).size;
+	const fuzzyJaccard = fuzzyMatchedCount / totalUnique;
+	if (fuzzyJaccard >= 0.5) {
+		return 0.6 + 0.25 * fuzzyJaccard;
 	}
 
 	// Edit distance for single word / close typos (e.g. "vhikcn" -> "chicken")
