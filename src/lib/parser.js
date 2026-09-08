@@ -123,9 +123,9 @@ function cleanName(n) {
 export function parseInput(input) {
 	if (!input || !input.trim()) return [];
 
-	/* split on comma, "and", "+", newline */
+	/* split on comma, "and", "&", "+", newline */
 	const parts = input
-		.split(/[,\n+]|\band\b/gi)
+		.split(/[,\n+&]|\band\b/gi)
 		.map(s => s.trim())
 		.filter(Boolean);
 
