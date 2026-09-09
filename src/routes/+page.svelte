@@ -20,6 +20,9 @@
 	/* Portion size picker state */
 	let sizePicker = $state(null); // { items: [{parsedItem, food, source}], currentIdx: 0 }
 	let sizePickerAnimating = $state(false);
+	/* Food disambiguation picker state */
+	let foodPicker = $state(null); // { query, parsedItem, candidates: [...foods], resolvedItems, missed, rawInput, remainingParsed }
+	let foodPickerAnimating = $state(false);
 	let removingItems = $state(new Set());
 	let theme = $state('dark');
 	let activeTab = $state('daily');
@@ -545,13 +548,42 @@
 			return;
 		}
 
-		const resolvedItems = [];
-		const missed = [];
+		await resolveItems(parsed, [], [], rawInput);
+	}
 
-		for (const item of parsed) {
+	/**
+	 * Resolve parsed items one by one — if a food is ambiguous, show the picker
+	 * and pause. The picker callback resumes by calling this function with
+	 * the remaining items.
+	 */
+	async function resolveItems(remaining, resolvedSoFar, missedSoFar, rawInput) {
+		const resolvedItems = [...resolvedSoFar];
+		const missed = [...missedSoFar];
+
+		for (let idx = 0; idx < remaining.length; idx++) {
+			const item = remaining[idx];
 			try {
-				let food = await findFood(item.name);
+				let result = await findFood(item.name);
 				let source = 'local';
+
+				// Ambiguous — show food picker and pause
+				if (result && result.ambiguous) {
+					foodPicker = {
+						query: item.name,
+						parsedItem: item,
+						candidates: result.candidates,
+						resolvedItems,
+						missed,
+						rawInput,
+						remainingParsed: remaining.slice(idx + 1)
+					};
+					foodPickerAnimating = true;
+					loading = false;
+					input = '';
+					return; // pause — picker callback will resume
+				}
+
+				let food = result;
 
 				if (!food) {
 					status = { type: 'loading', message: `analyzing ${item.name}...` };
@@ -619,6 +651,67 @@
 		await logResolvedItems(resolvedItems, rawInput, {});
 		input = '';
 		loading = false;
+	}
+
+	/** Handle food picker selection — user picked a specific food */
+	async function pickFood(food) {
+		if (!foodPicker) return;
+		const { parsedItem, resolvedItems, missed, rawInput, remainingParsed } = foodPicker;
+
+		foodPickerAnimating = false;
+		await new Promise(r => setTimeout(r, 150));
+
+		resolvedItems.push({ parsedItem, food, source: 'local' });
+
+		foodPicker = null;
+		loading = true;
+
+		// Resume resolving remaining items
+		await resolveItems(remainingParsed, resolvedItems, missed, rawInput);
+	}
+
+	/** Handle "just X?" — look up the raw query via Gemini */
+	async function pickFoodGeneric() {
+		if (!foodPicker) return;
+		const { query, parsedItem, resolvedItems, missed, rawInput, remainingParsed } = foodPicker;
+
+		foodPickerAnimating = false;
+		await new Promise(r => setTimeout(r, 150));
+		foodPicker = null;
+		loading = true;
+		status = { type: 'loading', message: `analyzing ${query}...` };
+
+		try {
+			const res = await fetch('/api/lookup', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ food: query })
+			});
+
+			if (res.ok) {
+				let food = await res.json();
+				food.id = await saveFood(food);
+				dbCount = (await getAllFoods()).length;
+				resolvedItems.push({ parsedItem, food, source: 'gemini' });
+			} else {
+				missed.push(query);
+			}
+		} catch (e) {
+			if (!navigator.onLine) {
+				status = { type: 'error', message: `You are offline! Connect just once to learn "${query}". After that, you can log it offline forever.` };
+				loading = false;
+				return;
+			}
+			missed.push(query);
+		}
+
+		await resolveItems(remainingParsed, resolvedItems, missed, rawInput);
+	}
+
+	/** Dismiss food picker (fall back to Gemini) */
+	function dismissFoodPicker() {
+		if (!foodPicker) return;
+		pickFoodGeneric();
 	}
 
 	/** Log resolved items (with vessel sizes from picker) */
@@ -738,7 +831,7 @@
 	}
 
 	function handleKeydown(e) {
-		if (e.key === 'Enter' && !sizePicker) handleSubmit();
+		if (e.key === 'Enter' && !sizePicker && !foodPicker) handleSubmit();
 	}
 
 	function formatQty(item) {
@@ -950,6 +1043,36 @@
 								<span class="size-option-grams">~{grams}g</span>
 							</button>
 						{/each}
+					</div>
+				</div>
+			{/if}
+			{#if foodPicker}
+				<div class="size-picker" class:size-picker-visible={foodPickerAnimating}>
+					<div class="size-picker-header">
+						<span class="size-picker-label">Which <strong>{foodPicker.query}</strong>?</span>
+						<button class="size-picker-dismiss" onclick={dismissFoodPicker} aria-label="Skip, look up online">
+							<span class="material-symbols-outlined">close</span>
+						</button>
+					</div>
+					<div class="food-picker-options">
+						{#each foodPicker.candidates as candidate, i}
+							<button
+								class="food-pick-option"
+								style="animation-delay: {i * 80}ms"
+								onclick={() => pickFood(candidate)}
+							>
+								<span class="food-pick-name">{candidate.name}</span>
+								<span class="food-pick-cal">{candidate.per_100g.cal} kcal/100g</span>
+							</button>
+						{/each}
+						<button
+							class="food-pick-option food-pick-generic"
+							style="animation-delay: {foodPicker.candidates.length * 80}ms"
+							onclick={pickFoodGeneric}
+						>
+							<span class="food-pick-name">just {foodPicker.query}?</span>
+							<span class="food-pick-cal">look up online</span>
+						</button>
 					</div>
 				</div>
 			{/if}

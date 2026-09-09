@@ -780,6 +780,73 @@ body {
 	}
 }
 
+/* FOOD PICKER (disambiguation) */
+
+.food-picker-options {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+
+.food-pick-option {
+	background: var(--surface-container);
+	border: 1px solid rgba(255, 255, 255, 0.06);
+	border-radius: 14px;
+	padding: 0.75rem 1rem;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	cursor: pointer;
+	transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), background 200ms ease, border-color 200ms ease;
+	animation: sizeOptionPop 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.food-pick-option:hover {
+	background: var(--surface-container-high);
+	border-color: rgba(255, 255, 255, 0.12);
+	transform: translateY(-1px);
+}
+
+.food-pick-option:active {
+	transform: scale(0.97);
+}
+
+.food-pick-name {
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--on-surface);
+	text-align: left;
+}
+
+.food-pick-cal {
+	font-size: 11px;
+	color: var(--outline);
+	font-weight: 400;
+	white-space: nowrap;
+}
+
+.food-pick-generic {
+	border-style: dashed;
+	border-color: rgba(208, 188, 255, 0.2);
+	background: rgba(208, 188, 255, 0.04);
+}
+
+.food-pick-generic:hover {
+	background: rgba(208, 188, 255, 0.1);
+	border-color: rgba(208, 188, 255, 0.35);
+}
+
+.food-pick-generic .food-pick-name {
+	color: var(--primary);
+	font-weight: 500;
+}
+
+.food-pick-generic .food-pick-cal {
+	color: var(--primary);
+	opacity: 0.6;
+}
+
 /* TODAY'S LOG */
 
 .log-card {
@@ -2643,6 +2710,21 @@ body {
 :root[data-theme="light"] .size-option-default {
 	border-color: rgba(103, 80, 164, 0.3);
 	background: rgba(103, 80, 164, 0.06);
+}
+
+:root[data-theme="light"] .food-pick-option {
+	background: var(--surface-container);
+	border-color: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .food-pick-generic {
+	border-color: rgba(103, 80, 164, 0.25);
+	background: rgba(103, 80, 164, 0.04);
+}
+
+:root[data-theme="light"] .food-pick-generic:hover {
+	background: rgba(103, 80, 164, 0.08);
+	border-color: rgba(103, 80, 164, 0.35);
 }
 
 :root[data-theme="light"] .macro-card {

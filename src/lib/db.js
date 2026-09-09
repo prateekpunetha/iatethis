@@ -207,7 +207,10 @@ function getLocalDateStr(date = new Date()) {
 
 /**
  * Search for a food in the local database.
- * Returns the best match or null if nothing is close enough.
+ * Returns:
+ *   - a food object if a single clear match is found
+ *   - { ambiguous: true, candidates: [...foods] } if multiple foods tie
+ *   - null if nothing is close enough
  * @param {string} query
  */
 export async function findFood(query) {
@@ -228,6 +231,8 @@ export async function findFood(query) {
 	/* 2. Fuzzy / scored match */
 	let best = null;
 	let bestScore = 0;
+	const tiedFoods = []; // collect all distinct foods that share the best score
+	const seenIds = new Set();
 	for (const f of all) {
 		const candidates = [f.name, ...(f.aliases || [])];
 		for (const cand of candidates) {
@@ -235,20 +240,21 @@ export async function findFood(query) {
 			if (sc > bestScore) {
 				bestScore = sc;
 				best = f;
-			} else if (sc === bestScore && sc > 0 && best) {
-				// Tiebreaker: prefer more frequently used foods
-				const fTimes = f.times_used || 0;
-				const bestTimes = best.times_used || 0;
-				if (fTimes > bestTimes) {
-					best = f;
-				} else if (fTimes === bestTimes) {
-					// Secondary tiebreaker: prefer shorter names (more generic)
-					if (f.name.length < best.name.length) {
-						best = f;
-					}
-				}
+				tiedFoods.length = 0;
+				tiedFoods.push(f);
+				seenIds.clear();
+				seenIds.add(f.id);
+			} else if (sc === bestScore && sc > 0 && !seenIds.has(f.id)) {
+				tiedFoods.push(f);
+				seenIds.add(f.id);
 			}
 		}
+	}
+
+	// If multiple distinct foods tied and score isn't near-perfect,
+	// the query is ambiguous (e.g. "chicken" matching breast/thigh/curry)
+	if (tiedFoods.length > 1 && bestScore < 0.95) {
+		return { ambiguous: true, candidates: tiedFoods };
 	}
 
 	if (bestScore >= 0.7) return best;
@@ -509,18 +515,38 @@ export function saveVesselPref(foodName, unit, size) {
   } catch { /* ignore */ }
 }
 
-
-/** Remove overly long aliases caused by old bug */
+/** Remove bad aliases: overly long ones from old bug, and ambiguous generic ones */
 export async function cleanupBadAliases() {
 	const db = await getDB();
 	const all = await db.getAll('foods');
 	let changed = false;
+
+	// Find single-word aliases that are ambiguous (multiple foods start with that word)
+	const wordToFoods = {};
+	for (const f of all) {
+		const firstName = normalize(f.name).split(/\s+/)[0];
+		if (firstName) {
+			wordToFoods[firstName] = (wordToFoods[firstName] || 0) + 1;
+		}
+	}
+
 	const tx = db.transaction('foods', 'readwrite');
 	for (const f of all) {
 		if (f.aliases && f.aliases.length > 0) {
 			const originalLength = f.aliases.length;
-			// Keep aliases that are reasonably short
-			f.aliases = f.aliases.filter(a => a.split(' ').length <= 4);
+			const nameWords = (f.name || '').split(/\s+/).length;
+			f.aliases = f.aliases.filter(a => {
+				const words = a.split(' ').length;
+				// Remove aliases longer than 4 words (old bug junk)
+				if (words > 4) return false;
+				// Remove single-word aliases for multi-word foods when ambiguous
+				// e.g. "chicken" as alias for "chicken breast" when "chicken thigh" also exists
+				if (words === 1 && nameWords >= 2) {
+					const norm = normalize(a);
+					if (wordToFoods[norm] && wordToFoods[norm] > 1) return false;
+				}
+				return true;
+			});
 			if (f.aliases.length !== originalLength) {
 				tx.store.put(f);
 				changed = true;
