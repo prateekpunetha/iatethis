@@ -595,6 +595,13 @@
 						});
 
 						if (!res.ok) {
+							/* already retried server side, so quota really is spent */
+							const err = await res.json().catch(() => ({}));
+							if (err.temporary) {
+								status = { type: 'error', message: `Gemini is busy right now — could not look up "${item.name}". Try again in a minute.` };
+								loading = false;
+								return;
+							}
 							missed.push(item.name);
 							continue;
 						}

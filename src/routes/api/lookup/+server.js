@@ -1,7 +1,19 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent';
+/* GA model. the 3.1 preview one 503'd on ~half of requests */
+const GEMINI_MODEL = 'gemini-3.5-flash-lite';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+/* quota is per project, so all users share one bucket. retry on the two
+   temporary codes — jitter so everyone doesn't retry in the same instant */
+const MAX_ATTEMPTS = 3;
+const RETRY_BASE_MS = 1000;
+
+/** @param {number} attempt */
+function retryDelay(attempt) {
+	return RETRY_BASE_MS * attempt + Math.floor(Math.random() * 500);
+}
 
 const SYSTEM_PROMPT = `You are a nutrition database. Given a food item, return ONLY valid JSON with its nutritional information per 100 grams. No markdown, no explanation, no code fences — just the raw JSON object.
 
@@ -41,30 +53,49 @@ export async function POST({ request }) {
 	}
 
 	try {
-		const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				system_instruction: {
-					parts: [{ text: SYSTEM_PROMPT }]
-				},
-				contents: [
-					{
-						role: 'user',
-						parts: [{ text: `Food item: "${food}"` }]
-					}
-				],
-				generationConfig: {
-					temperature: 0.1,
-					responseMimeType: 'application/json'
+		const body = JSON.stringify({
+			system_instruction: {
+				parts: [{ text: SYSTEM_PROMPT }]
+			},
+			contents: [
+				{
+					role: 'user',
+					parts: [{ text: `Food item: "${food}"` }]
 				}
-			})
+			],
+			generationConfig: {
+				temperature: 0.1,
+				responseMimeType: 'application/json'
+			}
 		});
+
+		let res = null;
+		for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+			res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body
+			});
+
+			/* 429 and 503 are temporary by definition, retry them */
+			if (res.ok || (res.status !== 429 && res.status !== 503)) break;
+
+			if (attempt < MAX_ATTEMPTS) {
+				const wait = retryDelay(attempt);
+				console.warn(`Gemini ${res.status} for "${food}", retry ${attempt + 1}/${MAX_ATTEMPTS} in ${wait}ms`);
+				await new Promise(r => setTimeout(r, wait));
+			}
+		}
 
 		if (!res.ok) {
 			const errText = await res.text();
 			console.error('Gemini API error:', res.status, errText);
-			return json({ error: 'Gemini API request failed' }, { status: 502 });
+			/* pass the real status through so the app can say "busy" vs "missed" */
+			const temporary = res.status === 429 || res.status === 503;
+			return json(
+				{ error: 'Gemini API request failed', status: res.status, temporary },
+				{ status: temporary ? 503 : 502 }
+			);
 		}
 
 		const data = await res.json();
