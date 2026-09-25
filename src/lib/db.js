@@ -1,4 +1,7 @@
 import { openDB } from 'idb';
+import { matchFood, findExactFoods, normalize, singularize, stem } from './matcher.js';
+
+export { normalize, singularize, stem };
 
 const DB_NAME = 'iatethis';
 const DB_VERSION = 1;
@@ -18,187 +21,6 @@ async function getDB() {
 	});
 }
 
-const SINGULAR_EXCEPTIONS = new Set([
-	'oats', 'hummus', 'couscous', 'citrus', 'basis', 'axis', 'lentils', 'chia'
-]);
-
-/**
- * Convert plural food words to singular
- * @param {string} word
- */
-export function singularize(word) {
-	if (!word || word.length <= 2) return word;
-	const w = word.toLowerCase().trim();
-	if (SINGULAR_EXCEPTIONS.has(w)) return w;
-	if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
-	if (w.endsWith('tomatoes')) return w.slice(0, -2);
-	if (w.endsWith('potatoes')) return w.slice(0, -2);
-	if (w.endsWith('mangoes')) return w.slice(0, -2);
-	if (w.endsWith('sandwiches')) return w.slice(0, -2);
-	if (w.endsWith('glasses')) return w.slice(0, -2);
-	if (w.endsWith('dishes')) return w.slice(0, -2);
-	if (w.endsWith('s') && !w.endsWith('ss') && !w.endsWith('us')) {
-		return w.slice(0, -1);
-	}
-	return w;
-}
-
-/**
- * Normalize a food name/query by removing punctuation and extra whitespace
- * @param {string} name
- */
-export function normalize(name) {
-	return (name || '')
-		.toLowerCase()
-		.replace(/[()[\]{},.;:!?\x27"\/\\_-]/g, ' ')
-		.replace(/\s+/g, ' ')
-		.trim();
-}
-
-/**
- * Stem a phrase into singular normalized tokens
- * @param {string} phrase
- */
-export function stem(phrase) {
-	return normalize(phrase)
-		.split(' ')
-		.filter(Boolean)
-		.map(singularize)
-		.join(' ');
-}
-
-/**
- * Levenshtein distance with transpositions (Damerau-Levenshtein)
- * @param {string} a
- * @param {string} b
- */
-function levenshtein(a, b) {
-	const m = a.length, n = b.length;
-	const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-	for (let i = 0; i <= m; i++) dp[i][0] = i;
-	for (let j = 0; j <= n; j++) dp[0][j] = j;
-	for (let i = 1; i <= m; i++) {
-		for (let j = 1; j <= n; j++) {
-			const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-			dp[i][j] = Math.min(
-				dp[i - 1][j] + 1, // deletion
-				dp[i][j - 1] + 1, // insertion
-				dp[i - 1][j - 1] + cost // substitution
-			);
-			if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-				dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + cost); // transposition
-			}
-		}
-	}
-	return dp[m][n];
-}
-
-/**
- * Similarity score based on edit distance (0-1)
- * @param {string} a
- * @param {string} b
- */
-function stringSimilarity(a, b) {
-	if (a === b) return 1;
-	const maxLen = Math.max(a.length, b.length);
-	if (maxLen === 0) return 1;
-	return 1 - (levenshtein(a, b) / maxLen);
-}
-
-/**
- * Score candidate match against query (0-1)
- * @param {string} query
- * @param {string} candidate
- */
-function scoreCandidate(query, candidate) {
-	const qNorm = normalize(query);
-	const cNorm = normalize(candidate);
-	if (!qNorm || !cNorm) return 0;
-	if (qNorm === cNorm) return 1.0;
-
-	const qStem = stem(query);
-	const cStem = stem(candidate);
-	if (qStem === cStem) return 0.98;
-
-	const qTokens = qStem.split(' ').filter(Boolean);
-	const cTokens = cStem.split(' ').filter(Boolean);
-	if (qTokens.length === 0 || cTokens.length === 0) return 0;
-
-	// Check sorted token equality (e.g. "boiled egg" vs "egg boiled")
-	if (qTokens.slice().sort().join(' ') === cTokens.slice().sort().join(' ')) {
-		return 0.95;
-	}
-
-	const qSet = new Set(qTokens);
-	const cSet = new Set(cTokens);
-
-	/**
-	 * Fuzzy-match a token against a set of tokens.
-	 * Returns true if the token exactly matches or is very similar (edit distance)
-	 * to any token in the target set.
-	 */
-	function fuzzyHas(token, targetTokens) {
-		for (const t of targetTokens) {
-			if (t === token) return true;
-			// Only do edit distance for tokens of reasonable length (>= 4 chars)
-			if (token.length >= 4 && t.length >= 4) {
-				const sim = stringSimilarity(token, t);
-				if (sim >= 0.7) return true;
-			}
-		}
-		return false;
-	}
-	
-	// Tokens in query that are also in candidate (exact)
-	const commonQ = qTokens.filter(t => cSet.has(t));
-	// Tokens in candidate that are also in query (exact)
-	const commonC = cTokens.filter(t => qSet.has(t));
-
-	// Tokens in query that fuzzy-match candidate tokens
-	const fuzzyCommonQ = qTokens.filter(t => fuzzyHas(t, cTokens));
-	// Tokens in candidate that fuzzy-match query tokens
-	const fuzzyCommonC = cTokens.filter(t => fuzzyHas(t, qTokens));
-
-	// All query tokens are in candidate (e.g. "egg" in "boiled egg")
-	// Use fuzzy matching so "shawarma" matches "schwarma"
-	if (fuzzyCommonQ.length === qTokens.length) {
-		const ratio = qTokens.length / cTokens.length;
-		// Discount slightly if any match was fuzzy (not exact)
-		const exactCount = commonQ.length;
-		const fuzzyPenalty = exactCount === qTokens.length ? 0 : 0.03;
-		if (ratio === 1.0) return 1.0 - fuzzyPenalty;
-		if (ratio >= 0.5) return 0.8 + 0.15 * ratio - fuzzyPenalty;
-		return 0.4 + 0.3 * ratio - fuzzyPenalty;
-	}
-
-	// All candidate tokens are in query (e.g. "chicken" in "cooked chicken breast")
-	if (fuzzyCommonC.length === cTokens.length) {
-		const ratio = cTokens.length / qTokens.length;
-		const exactCount = commonC.length;
-		const fuzzyPenalty = exactCount === cTokens.length ? 0 : 0.03;
-		if (ratio === 1.0) return 1.0 - fuzzyPenalty;
-		if (ratio >= 0.6) return 0.7 + 0.25 * ratio - fuzzyPenalty;
-		return 0.4 + 0.4 * ratio - fuzzyPenalty;
-	}
-
-	// Token overlap Jaccard (use fuzzy matching)
-	const fuzzyMatchedCount = fuzzyCommonQ.length;
-	const totalUnique = new Set([...qTokens, ...cTokens]).size;
-	const fuzzyJaccard = fuzzyMatchedCount / totalUnique;
-	if (fuzzyJaccard >= 0.5) {
-		return 0.6 + 0.25 * fuzzyJaccard;
-	}
-
-	// Edit distance for single word / close typos (e.g. "vhikcn" -> "chicken")
-	if (qTokens.length === 1 && cTokens.length === 1) {
-		const sim = stringSimilarity(qStem, cStem);
-		if (sim >= 0.55) {
-			return 0.65 + 0.3 * sim; // maps 0.55->0.81, 1.0->0.95
-		}
-	}
-
-	return 0;
-}
 
 /** Get local date string YYYY-MM-DD */
 function getLocalDateStr(date = new Date()) {
@@ -217,48 +39,7 @@ export async function findFood(query) {
 	if (!query || !query.trim()) return null;
 	const db = await getDB();
 	const all = await db.getAll('foods');
-	const qNorm = normalize(query);
-	const qStem = stem(query);
-
-	/* 1. Direct exact or stemmed name / alias match */
-	for (const f of all) {
-		if (normalize(f.name) === qNorm || stem(f.name) === qStem) return f;
-		for (const a of (f.aliases || [])) {
-			if (normalize(a) === qNorm || stem(a) === qStem) return f;
-		}
-	}
-
-	/* 2. Fuzzy / scored match */
-	let best = null;
-	let bestScore = 0;
-	const tiedFoods = []; // collect all distinct foods that share the best score
-	const seenIds = new Set();
-	for (const f of all) {
-		const candidates = [f.name, ...(f.aliases || [])];
-		for (const cand of candidates) {
-			const sc = scoreCandidate(query, cand);
-			if (sc > bestScore) {
-				bestScore = sc;
-				best = f;
-				tiedFoods.length = 0;
-				tiedFoods.push(f);
-				seenIds.clear();
-				seenIds.add(f.id);
-			} else if (sc === bestScore && sc > 0 && !seenIds.has(f.id)) {
-				tiedFoods.push(f);
-				seenIds.add(f.id);
-			}
-		}
-	}
-
-	// If multiple distinct foods tied and score isn't near-perfect,
-	// the query is ambiguous (e.g. "chicken" matching breast/thigh/curry)
-	if (tiedFoods.length > 1 && bestScore < 0.95) {
-		return { ambiguous: true, candidates: tiedFoods };
-	}
-
-	if (bestScore >= 0.7) return best;
-	return null;
+	return matchFood(query, all);
 }
 
 /**
@@ -268,8 +49,9 @@ export async function findFood(query) {
 export async function saveFood(food) {
 	if (!food || !food.name) return null;
 	const db = await getDB();
-	/* check if we already have this food */
-	const existing = await findFood(food.name);
+	/* Merge only on an EXACT name/alias match. Fuzzy merging used to silently
+	   overwrite the macros of an unrelated food (e.g. "pulaw" onto "Veg Pulav"). */
+	const existing = findExactFoods(food.name, await db.getAll('foods'))[0];
 	if (existing) {
 		/* merge aliases without duplicates */
 		const mergedAliases = Array.from(new Set([
