@@ -1,5 +1,10 @@
 node_modules
 
+# Skills are installed globally (~/.agents/skills), not vendored per-project.
+# A project copy shadows the global one and goes stale.
+.agents/skills/
+skills-lock.json
+
 # Output
 .output
 .vercel
