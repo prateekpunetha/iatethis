@@ -52,10 +52,11 @@
 		if (!summaryText) return { headline: '', body: '' };
 		const newlineIndex = summaryText.indexOf('\n');
 		if (newlineIndex === -1) {
-			return { headline: summaryText, body: '' };
+			return { headline: summaryText.replace(/^\*+|\*+$/g, '').replace(/^#+\s*/, '').trim(), body: '' };
 		}
+		const rawHeadline = summaryText.slice(0, newlineIndex).trim();
 		return {
-			headline: summaryText.slice(0, newlineIndex).trim(),
+			headline: rawHeadline.replace(/^\*+|\*+$/g, '').replace(/^#+\s*/, '').trim(),
 			body: summaryText.slice(newlineIndex).trim()
 		};
 	});
@@ -67,10 +68,44 @@
 		summaryText = '';
 		try {
 			const allItems = meals.flatMap(m => m.items);
+
+			// Calculate week history context dynamically
+			const pastMeals = await getMealsForDays(7);
+			const uniqueDates = new Set(pastMeals.map(m => m.date || getLocalDateStr(new Date(m.logged_at))));
+			const daysTracked = Math.max(1, uniqueDates.size);
+
+			let totalPastCal = 0;
+			let totalPastProtein = 0;
+			for (const m of pastMeals) {
+				for (const item of (m.items || [])) {
+					totalPastCal += item.cal || 0;
+					totalPastProtein += item.protein || 0;
+				}
+			}
+
 			const res = await fetch('/api/summary', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ items: allItems, totals })
+				body: JSON.stringify({
+					items: allItems,
+					totals,
+					profile: {
+						name: profileName !== 'You' ? profileName : null,
+						objective: profileObjective,
+						goals: {
+							cal: goals.cal,
+							protein: goals.protein,
+							fat: goals.fat,
+							carbs: goals.carbs,
+							fiber: goals.fiber
+						}
+					},
+					week: {
+						days_tracked: daysTracked,
+						avg_cal: Math.round(totalPastCal / daysTracked),
+						avg_protein: Math.round(totalPastProtein / daysTracked)
+					}
+				})
 			});
 			if (!res.ok) {
 				const data = await res.json().catch(() => ({}));
