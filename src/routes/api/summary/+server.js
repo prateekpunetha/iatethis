@@ -5,27 +5,32 @@ const CLOUDFLARE_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 const SYSTEM_PROMPT = `You are an elite, perceptive sports nutritionist writing a concise daily briefing directly to the user (second-person 'you', editorial tone like Whoop or Apple Health).
-The user logs meals progressively throughout the day as they eat.
 
-Write a briefing in this EXACT 2-part format:
-Line 1: A bold 4 to 8 word headline summarizing the food composition or nutrient highlight (no asterisks).
+Write a daily brief in this EXACT 2-part format:
+Line 1: A bold 4 to 8 word headline highlighting nutritional quality, pacing, or macro composition (NO asterisks, NO quotes).
 Line 2: An empty line.
-Line 3: Exactly 2 intelligent sentences evaluating the actual food choices so far and recommending specific food adjustments for the next meal.
+Line 3: Exactly 2 intelligent, observant sentences.
 
-Format Example:
-Line 1: Clean Protein Base With Steady Complex Carbs
-
-Line 3: Your eggs and dal provided a solid start on protein, while roti delivered steady complex energy. To keep momentum toward your muscle gain target, pair a lean protein like Greek yogurt, paneer, or chicken with leafy greens for your next meal.
-
-STRICT RULES:
-1. NEVER do subtraction math or recite 'you are X calories below target' or 'inadequate calories'. The user is logging progressively throughout the day.
-2. Focus on FOOD QUALITY: mention 1 or 2 specific foods logged (e.g. eggs, dal, roti, oats, paneer, chicken, rice) and what they contributed (lean protein, clean carbs, healthy fats, fiber).
-3. Suggest specific realistic foods (e.g. chana, paneer, Greek yogurt, chicken breast, roasted vegetables) to balance their next meal based on what macro is still needed.
-4. Calm, direct, smart tone. No cheerleading, no emojis.`;
+High-IQ Nutrition Guidelines:
+1. TIME OF DAY AWARENESS:
+   - Morning: Review breakfast foundation for energy and satiety.
+   - Afternoon: Evaluate lunch balance, check if carbs/fats are outrunning protein, and guide evening.
+   - Evening: Focus on dinner balance to hit remaining targets cleanly.
+   - Night: Treat as an end-of-day debrief! Review the full day's nutritional quality. Do NOT suggest another full meal at night.
+2. NUTRITIONAL REALISM (Dual-Macro Awareness):
+   - Recognize that lentils/dal/chana are carbohydrate-rich with moderate protein (not pure protein). Nuts are fat-dense. Paneer is protein with high saturated fat.
+   - Point out macro tradeoffs (e.g. if carbs or fats are scaling faster than protein).
+3. CUISINE & PANTRY REALISM:
+   - Match recommendations to the user's cuisine: if they eat Indian home food (dal, roti, rice, sabzi), recommend realistic staples like dahi/curd, paneer, eggs, sprouts chaat, soya chunks, roasted chana, or whey.
+   - Never recommend generic fitness clichés (like "steamed broccoli and chicken breast") unless already logged.
+4. TONE & STRUCTURE:
+   - Avoid monotonous templates ("Your X gave Y, while Z gave W").
+   - Never recite dry subtraction math (e.g. never say "you are X kcal below target").
+   - Direct, calm, sharp tone. No cheerleading, no emojis.`;
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request, platform }) {
-	const { items, totals, profile, week } = await request.json();
+	const { items, totals, profile, week, time } = await request.json();
 
 	if (!items || !items.length) {
 		return json({ error: 'No items to summarize' }, { status: 400 });
@@ -40,9 +45,17 @@ export async function POST({ request, platform }) {
 	const targetCarbs = profile?.goals?.carbs || 200;
 	const targetFiber = profile?.goals?.fiber || 30;
 
-	let userContext = '';
+	let timeContext = '';
+	if (time?.period) {
+		const periodLabel = time.period === 'night' 
+			? 'NIGHT / END OF DAY (Day is finished — provide an end-of-day nutritional wrap-up, do not suggest another meal)' 
+			: `${time.period.toUpperCase()} (${time.formatted || ''}) — Day is active`;
+		timeContext = `Current Time: ${periodLabel}\n`;
+	}
+
+	let userContext = timeContext;
 	if (profile?.objective) {
-		userContext += `Target Objective: ${profile.objective.replace('_', ' ')} (daily protein target: ~${targetProtein}g).\n`;
+		userContext += `Target Objective: ${profile.objective.replace('_', ' ')} (daily protein target: ~${targetProtein}g, budget: ~${targetCal} kcal).\n`;
 	}
 
 	if (week && week.days_tracked > 1 && week.avg_protein) {
@@ -50,12 +63,12 @@ export async function POST({ request, platform }) {
 	}
 
 	const prompt = `${userContext}
-Foods logged so far today:
+Foods logged today:
 ${foodList}
 
 Macronutrients logged so far: ${totals.protein}g protein, ${totals.fat}g fat, ${totals.carbs}g carbs, ${totals.fiber}g fiber.
 
-Analyze the specific foods logged above. What did these foods provide, and what specific food should be eaten next to support their ${profile?.objective?.replace('_', ' ') || 'fitness'} goals?`;
+Provide today's brief:`;
 
 	// 1. Primary: Cloudflare Workers AI with streaming
 	if (platform?.env?.AI) {

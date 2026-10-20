@@ -84,12 +84,23 @@
 				}
 			}
 
+			// Local time context
+			const now = new Date();
+			const hour = now.getHours();
+			const period = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
+			const formattedTime = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
 			const res = await fetch('/api/summary', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					items: allItems,
 					totals,
+					time: {
+						hour,
+						period,
+						formatted: formattedTime
+					},
 					profile: {
 						name: profileName !== 'You' ? profileName : null,
 						objective: profileObjective,
