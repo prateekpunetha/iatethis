@@ -48,6 +48,18 @@
 	let summaryLoading = $state(false);
 	let summaryError = $state('');
 
+	let briefingParts = $derived.by(() => {
+		if (!summaryText) return { headline: '', body: '' };
+		const newlineIndex = summaryText.indexOf('\n');
+		if (newlineIndex === -1) {
+			return { headline: summaryText, body: '' };
+		}
+		return {
+			headline: summaryText.slice(0, newlineIndex).trim(),
+			body: summaryText.slice(newlineIndex).trim()
+		};
+	});
+
 	async function fetchDailySummary() {
 		if (!meals.length || summaryLoading) return;
 		summaryLoading = true;
@@ -1149,38 +1161,59 @@
 
 		<!-- Today's Log -->
 		{#if meals.length > 0}
-			<!-- Daily Briefing -->
-			<section class="daily-brief-card">
-				<div class="daily-brief-header">
-					<div class="daily-brief-title">
-						<span class="material-symbols-outlined daily-brief-icon">notes</span>
-						<span>Daily Briefing</span>
+			<section class="fitbit-card">
+				<!-- Top Pill Header (like Fitbit Sleep pill) -->
+				<div class="fitbit-card-top">
+					<div class="fitbit-pill">
+						<span class="material-symbols-outlined fitbit-pill-icon">restaurant</span>
+						<span>Nutrition</span>
 					</div>
 					{#if summaryText && !summaryLoading}
-						<button class="daily-brief-refresh" onclick={fetchDailySummary} aria-label="Refresh daily briefing">
+						<button class="fitbit-refresh-btn" onclick={fetchDailySummary} aria-label="Refresh daily briefing">
 							<span class="material-symbols-outlined">refresh</span>
 						</button>
 					{/if}
 				</div>
-				{#if summaryText}
-					<p class="daily-brief-text">
-						{summaryText}{#if summaryLoading}<span class="stream-cursor"></span>{/if}
-					</p>
-				{:else if summaryLoading}
-					<p class="daily-brief-text loading">
-						Analyzing today's nutrition<span class="stream-cursor"></span>
-					</p>
-				{:else if summaryError}
-					<p class="daily-brief-text error">{summaryError}</p>
-				{:else}
-					<button class="daily-brief-btn" onclick={fetchDailySummary}>
-						Generate daily brief
-					</button>
-				{/if}
-			</section>
 
-			<section class="log-card">
-				<h2 class="log-card-title">Today's Log</h2>
+				<!-- Bold Headline + Briefing Text -->
+				{#if summaryText || summaryLoading}
+					<div class="fitbit-briefing">
+						{#if briefingParts.headline}
+							<h3 class="fitbit-headline">
+								{briefingParts.headline}{#if summaryLoading && !briefingParts.body}<span class="stream-cursor"></span>{/if}
+							</h3>
+						{/if}
+						{#if briefingParts.body}
+							<p class="fitbit-body">
+								{briefingParts.body}{#if summaryLoading}<span class="stream-cursor"></span>{/if}
+							</p>
+						{:else if summaryLoading && !briefingParts.headline}
+							<p class="fitbit-body loading">
+								Analyzing today's nutrition<span class="stream-cursor"></span>
+							</p>
+						{/if}
+					</div>
+				{:else if summaryError}
+					<p class="fitbit-error">{summaryError}</p>
+				{:else}
+					<div class="fitbit-prompt">
+						<button class="fitbit-generate-btn" onclick={fetchDailySummary}>
+							<span class="material-symbols-outlined">notes</span>
+							<span>Generate today's brief</span>
+						</button>
+					</div>
+				{/if}
+
+				<!-- Subtle Divider -->
+				<div class="fitbit-divider"></div>
+
+				<!-- Today's Food List Header -->
+				<div class="fitbit-list-subhead">
+					<span class="fitbit-list-title">TODAY'S LOG</span>
+					<span class="fitbit-list-count">{meals.reduce((acc, m) => acc + m.items.length, 0)} items</span>
+				</div>
+
+				<!-- Today's Food Entries -->
 				<div class="log-entries">
 					{#each [...meals].reverse() as meal, mealIdx (meal.id)}
 						{#each meal.items as item, itemIdx}

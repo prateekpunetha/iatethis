@@ -4,13 +4,14 @@ import { env } from '$env/dynamic/private';
 const CLOUDFLARE_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
-const SYSTEM_PROMPT = `You are a concise nutrition analyst. Given a person's food log for the day, write a 2-3 sentence daily briefing.
-Comment directly on:
-- Protein progress against a typical target (~140-160g)
-- Balance of carbs, fat, or fiber
-- One actionable takeaway for the rest of the day
+const SYSTEM_PROMPT = `You are a concise nutrition analyst. Given a person's food log for the day, generate a daily briefing in this EXACT 2-part format:
+Line 1: A bold, punchy headline in 4 to 8 words summarizing today's nutrition (like a Fitbit or Apple Health insight). Do not use quotes, asterisks, or markdown.
+Line 2: An empty line.
+Line 3: 2 concise, actionable sentences explaining the macro balance and giving one takeaway for the rest of the day.
 
-Tone: Professional, direct, editorial, calm. No cheerleading, no emojis, no boilerplate introductions. Speak like a modern health briefing (Fitbit/Whoop).`;
+Rules:
+- Professional, direct, calm tone.
+- No emojis, no markdown symbols (no #, no **), no cheerleading, no intro fluff.`;
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request, platform }) {
