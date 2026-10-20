@@ -3006,6 +3006,7 @@ body,
 .header,
 .macro-card,
 .log-card,
+.daily-brief-card,
 .glass-input,
 .bottom-nav,
 .search-bar,
@@ -3021,3 +3022,96 @@ body,
 	.date-pill {
 	transition: background var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
+
+/* Daily Briefing Card (Fitbit/Health Style) */
+.daily-brief-card {
+	background: var(--surface-container-low);
+	border: 1px solid var(--outline-variant);
+	border-radius: var(--radius-lg);
+	padding: 14px 18px;
+	margin-top: 16px;
+	backdrop-filter: blur(12px);
+}
+
+.daily-brief-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 6px;
+}
+
+.daily-brief-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-family: inherit;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--on-surface-variant);
+}
+
+.daily-brief-icon {
+	font-size: 15px;
+	color: var(--on-surface-variant);
+}
+
+.daily-brief-refresh {
+	background: transparent;
+	border: none;
+	color: var(--on-surface-variant);
+	cursor: pointer;
+	padding: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-sm);
+	transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.daily-brief-refresh:hover:not(:disabled) {
+	color: var(--on-surface);
+	transform: rotate(45deg);
+}
+
+.daily-brief-refresh .spin {
+	animation: spin 1s linear infinite;
+}
+
+.daily-brief-text {
+	font-size: 14px;
+	line-height: 1.6;
+	color: var(--on-surface);
+	margin: 0;
+	word-break: break-word;
+}
+
+.daily-brief-text.loading {
+	color: var(--on-surface-variant);
+	font-style: normal;
+}
+
+.daily-brief-text.error {
+	color: var(--error);
+	font-size: 13px;
+}
+
+.daily-brief-btn {
+	background: var(--surface-container-high);
+	color: var(--on-surface);
+	border: 1px solid var(--outline-variant);
+	padding: 6px 14px;
+	border-radius: var(--radius-md);
+	font-size: 12px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.daily-brief-btn:hover {
+	background: var(--surface-bright);
+	border-color: var(--outline);
+}
+
+

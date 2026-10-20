@@ -43,6 +43,35 @@
 	/* Drawer state */
 	let isDrawerOpen = $state(false);
 
+	/* Daily Briefing state */
+	let summaryText = $state('');
+	let summaryLoading = $state(false);
+	let summaryError = $state('');
+
+	async function fetchDailySummary() {
+		if (!meals.length || summaryLoading) return;
+		summaryLoading = true;
+		summaryError = '';
+		try {
+			const allItems = meals.flatMap(m => m.items);
+			const res = await fetch('/api/summary', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ items: allItems, totals })
+			});
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				throw new Error(data.error || 'Failed to generate briefing');
+			}
+			const data = await res.json();
+			summaryText = data.summary;
+		} catch (err) {
+			summaryError = err.message || 'Could not load briefing';
+		} finally {
+			summaryLoading = false;
+		}
+	}
+
 	/* Insights tab state */
 	let insightsMeals = $state([]);
 	/** @type {any[]} full meal history, for true streak counting */
@@ -598,7 +627,7 @@
 							/* already retried server side, so quota really is spent */
 							const err = await res.json().catch(() => ({}));
 							if (err.temporary) {
-								status = { type: 'error', message: `Gemini is busy right now — could not look up "${item.name}". Try again in a minute.` };
+								status = { type: 'error', message: `AI is busy right now — could not look up "${item.name}". Try again in a minute.` };
 								loading = false;
 								return;
 							}
@@ -608,7 +637,7 @@
 
 						food = await res.json();
 						food.id = await saveFood(food);
-						source = 'gemini';
+						source = food.source || 'ai';
 						dbCount = (await getAllFoods()).length;
 					} catch (e) {
 						if (!navigator.onLine) {
@@ -699,7 +728,7 @@
 				let food = await res.json();
 				food.id = await saveFood(food);
 				dbCount = (await getAllFoods()).length;
-				resolvedItems.push({ parsedItem, food, source: 'gemini' });
+				resolvedItems.push({ parsedItem, food, source: food.source || 'ai' });
 			} else {
 				missed.push(query);
 			}
@@ -1087,6 +1116,32 @@
 
 		<!-- Today's Log -->
 		{#if meals.length > 0}
+			<!-- Daily Briefing -->
+			<section class="daily-brief-card">
+				<div class="daily-brief-header">
+					<div class="daily-brief-title">
+						<span class="material-symbols-outlined daily-brief-icon">notes</span>
+						<span>Daily Briefing</span>
+					</div>
+					{#if summaryText}
+						<button class="daily-brief-refresh" onclick={fetchDailySummary} disabled={summaryLoading} aria-label="Refresh daily briefing">
+							<span class="material-symbols-outlined" class:spin={summaryLoading}>refresh</span>
+						</button>
+					{/if}
+				</div>
+				{#if summaryLoading}
+					<p class="daily-brief-text loading">Analyzing today's nutrition...</p>
+				{:else if summaryText}
+					<p class="daily-brief-text">{summaryText}</p>
+				{:else if summaryError}
+					<p class="daily-brief-text error">{summaryError}</p>
+				{:else}
+					<button class="daily-brief-btn" onclick={fetchDailySummary}>
+						Generate daily brief
+					</button>
+				{/if}
+			</section>
+
 			<section class="log-card">
 				<h2 class="log-card-title">Today's Log</h2>
 				<div class="log-entries">
