@@ -52,6 +52,7 @@
 		if (!meals.length || summaryLoading) return;
 		summaryLoading = true;
 		summaryError = '';
+		summaryText = '';
 		try {
 			const allItems = meals.flatMap(m => m.items);
 			const res = await fetch('/api/summary', {
@@ -63,8 +64,40 @@
 				const data = await res.json().catch(() => ({}));
 				throw new Error(data.error || 'Failed to generate briefing');
 			}
-			const data = await res.json();
-			summaryText = data.summary;
+
+			const contentType = res.headers.get('content-type') || '';
+			if (contentType.includes('text/event-stream')) {
+				const reader = res.body?.getReader();
+				if (!reader) throw new Error('Streaming unavailable');
+				const decoder = new TextDecoder();
+				let buffer = '';
+
+				while (true) {
+					const { value, done } = await reader.read();
+					if (done) break;
+					buffer += decoder.decode(value, { stream: true });
+					const lines = buffer.split('\n');
+					buffer = lines.pop() || '';
+
+					for (const line of lines) {
+						const trimmed = line.trim();
+						if (!trimmed || !trimmed.startsWith('data:')) continue;
+						const dataStr = trimmed.slice(5).trim();
+						if (dataStr === '[DONE]') break;
+						try {
+							const parsed = JSON.parse(dataStr);
+							if (parsed.response) {
+								summaryText += parsed.response;
+							}
+						} catch (e) {
+							// Ignore incomplete chunk
+						}
+					}
+				}
+			} else {
+				const data = await res.json();
+				summaryText = data.summary || '';
+			}
 		} catch (err) {
 			summaryError = err.message || 'Could not load briefing';
 		} finally {
@@ -1123,16 +1156,20 @@
 						<span class="material-symbols-outlined daily-brief-icon">notes</span>
 						<span>Daily Briefing</span>
 					</div>
-					{#if summaryText}
-						<button class="daily-brief-refresh" onclick={fetchDailySummary} disabled={summaryLoading} aria-label="Refresh daily briefing">
-							<span class="material-symbols-outlined" class:spin={summaryLoading}>refresh</span>
+					{#if summaryText && !summaryLoading}
+						<button class="daily-brief-refresh" onclick={fetchDailySummary} aria-label="Refresh daily briefing">
+							<span class="material-symbols-outlined">refresh</span>
 						</button>
 					{/if}
 				</div>
-				{#if summaryLoading}
-					<p class="daily-brief-text loading">Analyzing today's nutrition...</p>
-				{:else if summaryText}
-					<p class="daily-brief-text">{summaryText}</p>
+				{#if summaryText}
+					<p class="daily-brief-text">
+						{summaryText}{#if summaryLoading}<span class="stream-cursor"></span>{/if}
+					</p>
+				{:else if summaryLoading}
+					<p class="daily-brief-text loading">
+						Analyzing today's nutrition<span class="stream-cursor"></span>
+					</p>
 				{:else if summaryError}
 					<p class="daily-brief-text error">{summaryError}</p>
 				{:else}

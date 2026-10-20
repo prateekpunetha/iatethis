@@ -30,28 +30,32 @@ Totals: ${Math.round(totals.cal)} kcal, ${totals.protein}g protein, ${totals.fat
 
 Provide today's brief:`;
 
-	// 1. Primary: Cloudflare Workers AI
+	// 1. Primary: Cloudflare Workers AI with streaming
 	if (platform?.env?.AI) {
 		try {
-			const aiRes = await platform.env.AI.run(CLOUDFLARE_MODEL, {
+			const stream = await platform.env.AI.run(CLOUDFLARE_MODEL, {
 				messages: [
 					{ role: 'system', content: SYSTEM_PROMPT },
 					{ role: 'user', content: prompt }
 				],
 				temperature: 0.5,
-				max_tokens: 250
+				max_tokens: 250,
+				stream: true
 			});
 
-			const text = aiRes?.response;
-			if (text) {
-				return json({ summary: text.trim(), source: 'cloudflare' });
-			}
+			return new Response(stream, {
+				headers: {
+					'Content-Type': 'text/event-stream; charset=utf-8',
+					'Cache-Control': 'no-cache, no-transform',
+					'Connection': 'keep-alive'
+				}
+			});
 		} catch (err) {
-			console.error('Cloudflare Workers AI summary error:', err);
+			console.error('Cloudflare Workers AI summary stream error:', err);
 		}
 	}
 
-	// 2. Fallback: Gemini API
+	// 2. Fallback: Gemini API (non-stream fallback)
 	const apiKey = env.GEMINI_API_KEY;
 	if (apiKey) {
 		try {

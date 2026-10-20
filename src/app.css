@@ -3114,4 +3114,22 @@ body,
 	border-color: var(--outline);
 }
 
+/* ChatGPT-style Streaming Cursor */
+.stream-cursor {
+	display: inline-block;
+	width: 6px;
+	height: 14px;
+	margin-left: 3px;
+	background: var(--primary);
+	vertical-align: -1px;
+	border-radius: 1px;
+	animation: cursorBlink 0.8s infinite ease-in-out;
+}
+
+@keyframes cursorBlink {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0; }
+}
+
+
 
