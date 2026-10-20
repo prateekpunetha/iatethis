@@ -3107,6 +3107,7 @@ body,
 	color: var(--on-surface-variant);
 	margin: 0;
 	word-break: break-word;
+	white-space: pre-line;
 }
 
 .fitbit-body.loading {

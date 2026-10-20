@@ -4,16 +4,24 @@ import { env } from '$env/dynamic/private';
 const CLOUDFLARE_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
-const SYSTEM_PROMPT = `You are a concise nutrition analyst. Given a person's food log, their target goals, and their week's progress, write a daily briefing in this EXACT 2-part format:
-Line 1: A bold, punchy headline in 4 to 8 words summarizing today's status (like an Apple Health or Fitbit insight). No quotes, no asterisks, no prefix.
-Line 2: An empty line.
-Line 3: 2 concise, actionable sentences evaluating today against their specific target goals and giving one takeaway for the rest of the day.
+const SYSTEM_PROMPT = `You are an elite, perceptive sports nutritionist writing a concise daily briefing directly to the user (second-person 'you', editorial tone like Whoop or Apple Health).
+The user logs meals progressively throughout the day as they eat.
 
-Rules:
-- Respect their explicit goals (do not recommend generic gym targets if their goal says otherwise).
-- If only 1 day has been tracked, focus strictly on today vs their goal (do not assume past trends).
-- If multiple days are tracked, you may highlight consistency, improvements, or streaks.
-- Professional, direct, calm tone. No cheerleading, no emojis, no boilerplate intros.`;
+Write a briefing in this EXACT 2-part format:
+Line 1: A bold 4 to 8 word headline summarizing the food composition or nutrient highlight (no asterisks).
+Line 2: An empty line.
+Line 3: Exactly 2 intelligent sentences evaluating the actual food choices so far and recommending specific food adjustments for the next meal.
+
+Format Example:
+Line 1: Clean Protein Base With Steady Complex Carbs
+
+Line 3: Your eggs and dal provided a solid start on protein, while roti delivered steady complex energy. To keep momentum toward your muscle gain target, pair a lean protein like Greek yogurt, paneer, or chicken with leafy greens for your next meal.
+
+STRICT RULES:
+1. NEVER do subtraction math or recite 'you are X calories below target' or 'inadequate calories'. The user is logging progressively throughout the day.
+2. Focus on FOOD QUALITY: mention 1 or 2 specific foods logged (e.g. eggs, dal, roti, oats, paneer, chicken, rice) and what they contributed (lean protein, clean carbs, healthy fats, fiber).
+3. Suggest specific realistic foods (e.g. chana, paneer, Greek yogurt, chicken breast, roasted vegetables) to balance their next meal based on what macro is still needed.
+4. Calm, direct, smart tone. No cheerleading, no emojis.`;
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request, platform }) {
@@ -26,28 +34,28 @@ export async function POST({ request, platform }) {
 	const foodList = items.map(i => `- ${i.name}: ${i.qty_g}g (${Math.round(i.cal)} kcal, ${i.protein}g P, ${i.fat}g F, ${i.carbs}g C, ${i.fiber}g fiber)`).join('\n');
 
 	// Construct contextual prompt
+	const targetCal = profile?.goals?.cal || 2000;
+	const targetProtein = profile?.goals?.protein || 140;
+	const targetFat = profile?.goals?.fat || 60;
+	const targetCarbs = profile?.goals?.carbs || 200;
+	const targetFiber = profile?.goals?.fiber || 30;
+
 	let userContext = '';
-	if (profile) {
-		const objLabel = profile.objective ? ` (Objective: ${profile.objective.replace('_', ' ')})` : '';
-		userContext += `User Goal: ${profile.goals?.cal || 2000} kcal, ${profile.goals?.protein || 140}g protein, ${profile.goals?.fat || 60}g fat, ${profile.goals?.carbs || 200}g carbs${objLabel}.\n`;
+	if (profile?.objective) {
+		userContext += `Target Objective: ${profile.objective.replace('_', ' ')} (daily protein target: ~${targetProtein}g).\n`;
 	}
 
-	if (week) {
-		const daysTracked = week.days_tracked || 1;
-		userContext += `Tracking History: ${daysTracked} day(s) logged this week.`;
-		if (daysTracked > 1 && week.avg_protein) {
-			userContext += ` Week average: ${week.avg_cal} kcal, ${week.avg_protein}g protein. Active streak: ${week.streak || 0} days.`;
-		}
-		userContext += '\n';
+	if (week && week.days_tracked > 1 && week.avg_protein) {
+		userContext += `Weekly baseline: ${week.avg_cal} kcal, ${week.avg_protein}g protein (${week.days_tracked} days tracked).\n`;
 	}
 
 	const prompt = `${userContext}
-Today's food log:
+Foods logged so far today:
 ${foodList}
 
-Today's Totals: ${Math.round(totals.cal)} kcal, ${totals.protein}g protein, ${totals.fat}g fat, ${totals.carbs}g carbs, ${totals.fiber}g fiber.
+Macronutrients logged so far: ${totals.protein}g protein, ${totals.fat}g fat, ${totals.carbs}g carbs, ${totals.fiber}g fiber.
 
-Provide today's brief:`;
+Analyze the specific foods logged above. What did these foods provide, and what specific food should be eaten next to support their ${profile?.objective?.replace('_', ' ') || 'fitness'} goals?`;
 
 	// 1. Primary: Cloudflare Workers AI with streaming
 	if (platform?.env?.AI) {

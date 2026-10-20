@@ -51,12 +51,13 @@
 	let briefingParts = $derived.by(() => {
 		if (!summaryText) return { headline: '', body: '' };
 		const newlineIndex = summaryText.indexOf('\n');
+		const cleanLine = (str) => str.replace(/^[\*#_"'`\s]+|[\*#_"'`\s]+$/g, '').trim();
 		if (newlineIndex === -1) {
-			return { headline: summaryText.replace(/^\*+|\*+$/g, '').replace(/^#+\s*/, '').trim(), body: '' };
+			return { headline: cleanLine(summaryText), body: '' };
 		}
-		const rawHeadline = summaryText.slice(0, newlineIndex).trim();
+		const rawHeadline = summaryText.slice(0, newlineIndex);
 		return {
-			headline: rawHeadline.replace(/^\*+|\*+$/g, '').replace(/^#+\s*/, '').trim(),
+			headline: cleanLine(rawHeadline),
 			body: summaryText.slice(newlineIndex).trim()
 		};
 	});
