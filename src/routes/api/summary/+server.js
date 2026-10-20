@@ -4,29 +4,30 @@ import { env } from '$env/dynamic/private';
 const CLOUDFLARE_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
-const SYSTEM_PROMPT = `You are an elite, perceptive sports nutritionist writing a concise daily briefing directly to the user (second-person 'you', editorial tone like Whoop or Apple Health).
+const SYSTEM_PROMPT = `You are an elite nutritional telemetry engine (tone like Whoop, Oura, or Garmin).
+You output cold, high-precision analytical observations from food and macro telemetry.
 
-Write a daily brief in this EXACT 2-part format:
-Line 1: A bold 4 to 8 word headline highlighting nutritional quality, pacing, or macro composition (NO asterisks, NO quotes).
+OUTPUT FORMAT:
+Line 1: A bold 4 to 8 word telemetry pattern headline (no asterisks, no quotes).
 Line 2: An empty line.
-Line 3: Exactly 2 intelligent, observant sentences.
+Line 3: Exactly 2 concise, analytical observation sentences.
 
-High-IQ Nutrition Guidelines:
-1. TIME OF DAY AWARENESS:
-   - Morning: Review breakfast foundation for energy and satiety.
-   - Afternoon: Evaluate lunch balance, check if carbs/fats are outrunning protein, and guide evening.
-   - Evening: Focus on dinner balance to hit remaining targets cleanly.
-   - Night: Treat as an end-of-day debrief! Review the full day's nutritional quality. Do NOT suggest another full meal at night.
-2. NUTRITIONAL REALISM (Dual-Macro Awareness):
-   - Recognize that lentils/dal/chana are carbohydrate-rich with moderate protein (not pure protein). Nuts are fat-dense. Paneer is protein with high saturated fat.
-   - Point out macro tradeoffs (e.g. if carbs or fats are scaling faster than protein).
-3. CUISINE & PANTRY REALISM:
-   - Match recommendations to the user's cuisine: if they eat Indian home food (dal, roti, rice, sabzi), recommend realistic staples like dahi/curd, paneer, eggs, sprouts chaat, soya chunks, roasted chana, or whey.
-   - Never recommend generic fitness clichés (like "steamed broccoli and chicken breast") unless already logged.
-4. TONE & STRUCTURE:
-   - Avoid monotonous templates ("Your X gave Y, while Z gave W").
-   - Never recite dry subtraction math (e.g. never say "you are X kcal below target").
-   - Direct, calm, sharp tone. No cheerleading, no emojis.`;
+Format Examples:
+Line 1: Carbs Leading Protein 3:1 Ratio
+
+Line 3: Roti and dal drove the majority of calories, keeping protein density moderate at 19% of macro intake. Eggs provided the primary lean protein anchor, leaving 120g needed to hit target.
+
+Line 1: High Fat Density, Minimal Protein Volume
+
+Line 3: Samosa and sweet tea pushed fat intake to 60% of daily allowance with negligible protein. Carbohydrates and fats currently account for over 85% of total consumed energy.
+
+STRICT TELEMETRY RULES:
+1. ZERO ADVICE, ZERO HOMEWORK: Never say "consider", "you should", "try adding", "remember to", "to meet your goals", "to support", or "make sure to". Never prescribe recipes or meal plans.
+2. ZERO CHATBOT FLUFF: Never say "good job", "off to a solid start", "great choice", or "unfortunately". No cheerleading, no apologies.
+3. COLD OBSERVATION ONLY:
+   - Sentence 1: State the food composition and macro driver (mention specific logged items like dal, roti, eggs, rice, etc.).
+   - Sentence 2: State the pacing reality, macro density, or trade-off (e.g. fat margin, protein efficiency, or end-of-day closure).
+4. Direct, factual, high-signal language. No filler words.`;
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request, platform }) {
@@ -45,30 +46,33 @@ export async function POST({ request, platform }) {
 	const targetCarbs = profile?.goals?.carbs || 200;
 	const targetFiber = profile?.goals?.fiber || 30;
 
-	let timeContext = '';
-	if (time?.period) {
-		const periodLabel = time.period === 'night' 
-			? 'NIGHT / END OF DAY (Day is finished — provide an end-of-day nutritional wrap-up, do not suggest another meal)' 
-			: `${time.period.toUpperCase()} (${time.formatted || ''}) — Day is active`;
-		timeContext = `Current Time: ${periodLabel}\n`;
-	}
+	// Telemetry calculations
+	const proteinCal = totals.protein * 4;
+	const carbCal = totals.carbs * 4;
+	const fatCal = totals.fat * 9;
+	const totalMacroCal = proteinCal + carbCal + fatCal || 1;
+	const proteinSplitPct = Math.round((proteinCal / totalMacroCal) * 100);
+	const carbSplitPct = Math.round((carbCal / totalMacroCal) * 100);
+	const fatSplitPct = Math.round((fatCal / totalMacroCal) * 100);
+	const proteinDensity = totals.cal > 0 ? (totals.protein / (totals.cal / 100)).toFixed(1) : '0';
+	const fatTargetPct = Math.round((totals.fat / targetFat) * 100);
+	const proteinTargetPct = Math.round((totals.protein / targetProtein) * 100);
 
-	let userContext = timeContext;
-	if (profile?.objective) {
-		userContext += `Target Objective: ${profile.objective.replace('_', ' ')} (daily protein target: ~${targetProtein}g, budget: ~${targetCal} kcal).\n`;
-	}
+	let telemetryData = `Phase: ${time?.period ? time.period.toUpperCase() : 'DAY'} (${time?.formatted || ''})\n`;
+	telemetryData += `Target Objective: ${profile?.objective ? profile.objective.replace('_', ' ') : 'maintenance'} (daily protein target: ${targetProtein}g)\n`;
+	telemetryData += `Today's Totals: ${totals.protein}g protein, ${totals.fat}g fat, ${totals.carbs}g carbs, ${Math.round(totals.cal)} kcal\n`;
+	telemetryData += `Macro Breakdown: ${proteinSplitPct}% protein, ${carbSplitPct}% carbs, ${fatSplitPct}% fat (${proteinDensity}g protein per 100 kcal)\n`;
+	telemetryData += `Fat Budget Used: ${fatTargetPct}%\n`;
 
 	if (week && week.days_tracked > 1 && week.avg_protein) {
-		userContext += `Weekly baseline: ${week.avg_cal} kcal, ${week.avg_protein}g protein (${week.days_tracked} days tracked).\n`;
+		telemetryData += `- 7-Day Baseline: ${week.avg_cal} kcal, ${week.avg_protein}g protein\n`;
 	}
 
-	const prompt = `${userContext}
-Foods logged today:
+	const prompt = `${telemetryData}
+Logged Foods:
 ${foodList}
 
-Macronutrients logged so far: ${totals.protein}g protein, ${totals.fat}g fat, ${totals.carbs}g carbs, ${totals.fiber}g fiber.
-
-Provide today's brief:`;
+Generate objective telemetry brief:`;
 
 	// 1. Primary: Cloudflare Workers AI with streaming
 	if (platform?.env?.AI) {
