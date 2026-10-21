@@ -964,7 +964,11 @@
 
 	function formatQty(item) {
 		if (item.qty !== undefined) {
-			const unit = item.unit === 'piece' || item.unit === 'serving' ? '' : item.unit;
+			if (item.unit === 'serving') {
+				const label = item.qty === 1 ? 'serving' : 'servings';
+				return item.qty_g ? `${item.qty} ${label} · ${item.qty_g}g` : `${item.qty} ${label}`;
+			}
+			const unit = item.unit === 'piece' ? '' : item.unit;
 			return `${item.qty}${unit ? ' ' + unit : ''}`;
 		}
 		return `${item.qty_g}g`;
